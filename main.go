@@ -14,6 +14,7 @@ import (
 	"github.com/vmware/govmomi/vim25/soap"
 	"github.com/vmware/govmomi/vim25/types"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -24,7 +25,8 @@ var contextFlag = flag.String("context", "status", "Optional. Usage: -context <s
 var entityNameFlag = flag.String("entityName", "all", "Optional. Usage: -entityname <host, vm or resource name>")
 var timeoutFlag = flag.Duration("timeout", 10*time.Second, "Optional. Usage: -timeout <timeout in duration Ex.: 10s (ms,h,m can be used as well)>")
 var intervalFlag = flag.Int("i", 20, "Interval ID")
-var metricFlag = flag.String("metric", "cpu.usage.average", "Optional. Usage: -metric <cpu.usage.average>")
+var metricsFlag = flag.String("metrics", "cpu.usage.average", "Optional. Usage: -metrics <cpu.usage.average, mem.usage.average>")
+var functionsFlag = flag.String("functions", "last", "Optional. Usage: -functions <min,max,avg,last>")
 var maxSamplesFlag = flag.Int("maxSamples", 1, "Optional. Usage: -maxSamples <number of samples>")
 
 // NewClient creates a vim25.Client for use in the examples
@@ -114,11 +116,12 @@ func main() {
 			defer v.Destroy(ctx)
 			return GetHostsStatus(ctx, err, v)
 		} else if *entityFlag == "host" && *contextFlag == "metrics" {
-			if *metricFlag == "" || *intervalFlag == 0 {
+			if *metricsFlag == "" || *intervalFlag == 0 {
 				fmt.Fprint(os.Stdout, "You must specify metrics and interval.\n")
 				flag.Usage()
 				os.Exit(0)
 			}
+
 			v, err := m.CreateContainerView(ctx, c.ServiceContent.RootFolder, []string{"HostSystem"}, true)
 			if err != nil {
 				return err
@@ -151,7 +154,7 @@ func GetHostMetrics(ctx context.Context, err error, v *view.ContainerView) error
 
 	var names []string
 	for name := range counters {
-		if *metricFlag != "all" && name != *metricFlag {
+		if *metricsFlag != "all" && !strings.Contains(*metricsFlag, name) {
 			continue
 		}
 		names = append(names, name)
@@ -160,7 +163,7 @@ func GetHostMetrics(ctx context.Context, err error, v *view.ContainerView) error
 	// Create PerfQuerySpec
 	spec := types.PerfQuerySpec{
 		MaxSample:  int32(*maxSamplesFlag),
-		MetricId:   []types.PerfMetricId{{Instance: "*"}},
+		MetricId:   []types.PerfMetricId{{Instance: "0,1"}},
 		IntervalId: int32(*intervalFlag),
 	}
 
