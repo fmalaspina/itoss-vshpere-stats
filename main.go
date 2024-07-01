@@ -135,6 +135,7 @@ func main() {
 			var functions []string
 			if *functionsFlag != "last" {
 				functions = strings.Split(*functionsFlag, ",")
+
 				for _, f := range functions {
 					if !strings.Contains("last,min,max,avg", f) {
 						fmt.Fprint(os.Stdout, "You must specify a valid function (avg,min,max,last).\n")
@@ -142,6 +143,8 @@ func main() {
 						os.Exit(0)
 					}
 				}
+			} else {
+				functions = []string{"last"}
 			}
 
 			v, err := m.CreateContainerView(ctx, c.ServiceContent.RootFolder, []string{"HostSystem"}, true)
@@ -174,12 +177,13 @@ func GetHostMetrics(ctx context.Context, err error, v *view.ContainerView, funct
 		return err
 	}
 
-	var names []string
-	for name := range counters {
-		if *metricsFlag != "all" && !strings.Contains(*metricsFlag, name) {
-			continue
-		}
-		names = append(names, name)
+	var metricsToQuery []string
+
+	if len(strings.Split(*metricsFlag, ",")) > 1 {
+		metricsToQuery = strings.Split(*metricsFlag, ",")
+	} else {
+		metricsToQuery = []string{*metricsFlag}
+
 	}
 
 	// Create PerfQuerySpec
@@ -190,7 +194,7 @@ func GetHostMetrics(ctx context.Context, err error, v *view.ContainerView, funct
 	}
 
 	// Query metrics
-	sample, err := perfManager.SampleByName(ctx, spec, names, vmsRefs)
+	sample, err := perfManager.SampleByName(ctx, spec, metricsToQuery, vmsRefs)
 	if err != nil {
 		return err
 	}
@@ -200,8 +204,23 @@ func GetHostMetrics(ctx context.Context, err error, v *view.ContainerView, funct
 		return err
 	}
 
+	// construct titles
+	title := ""
+
+	for range metricsToQuery {
+		title += "entity;name;instance;metric"
+		for _, function := range functions {
+			title += ";" + function
+		}
+		title += ";units|"
+	}
+	// delete the las pipe character
+	title = title[:len(title)-1]
+
 	// Read result
+	var results []string
 	for _, metric := range result {
+		resultLine := ""
 		name := metric.Entity
 		if *entityNameFlag != "all" && name.Value != *entityNameFlag {
 			continue
@@ -221,7 +240,9 @@ func GetHostMetrics(ctx context.Context, err error, v *view.ContainerView, funct
 					fmt.Fprint(os.Stderr, "Error parsing metric CSV values: ", err, "\n")
 					os.Exit(0)
 				}
-				fmt.Printf("entity=%s;name=%s;instance=%s;metric=%s",
+				//fmt.Printf("entity=%s;name=%s;instance=%s;metric=%s",
+				//	name.Type, name.Value, instance, v.Name)
+				resultLine += fmt.Sprintf("%s;%s;%s;%s",
 					name.Type, name.Value, instance, v.Name)
 
 				for _, function := range functions {
@@ -230,19 +251,22 @@ func GetHostMetrics(ctx context.Context, err error, v *view.ContainerView, funct
 						fmt.Fprint(os.Stderr, "Error applying function:", err, "\n")
 						continue
 					}
-					fmt.Printf(";%s=%.2f", function, result)
+					resultLine += fmt.Sprintf(";%.2f", result)
 				}
-				fmt.Printf(";units:%s", units)
+				resultLine += fmt.Sprintf(";%s", units)
 				if *instanceFlag != "*" {
-					fmt.Println()
-				} else {
-					if len(strings.Split(*metricsFlag, ",")) > 1 {
-						fmt.Print("|")
-					}
+					results = append(results, resultLine)
 				}
 
 			}
 		}
+		results = append(results, resultLine)
+
+	}
+	// print title and then results
+	fmt.Println(title)
+	for _, result := range results {
+		fmt.Println(result)
 	}
 	return nil
 }
