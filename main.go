@@ -23,7 +23,7 @@ var urlFlag = flag.String("url", "", "Required. Usage: -url <https://username:pa
 var insecureFlag = flag.Bool("insecure", false, "Required. Usage: -insecure")
 var entityFlag = flag.String("entity", "host", "Optional. Usage: -entity <host|vm|resourcepool>")
 var contextFlag = flag.String("context", "status", "Optional. Usage: -context <status|config|metrics>")
-var entityNameFlag = flag.String("entityName", "all", "Optional. Usage: -entityname <host, vm or resource name>")
+var entityNameFlag = flag.String("entityName", "all", "Optional. Usage: -entityName <host name| vm name")
 var timeoutFlag = flag.Duration("timeout", 10*time.Second, "Optional. Usage: -timeout <timeout in duration Ex.: 10s (ms,h,m can be used as well)>")
 var intervalFlag = flag.Int("i", 0, "Optional. Usage: -i <interval id>")
 var metricsFlag = flag.String("metrics", "cpu.usage.average", "Optional. Usage: -metrics <cpu.usage.average, mem.usage.average>")
@@ -68,8 +68,8 @@ func Run(f func(context.Context, *vim25.Client) error) {
 		flag.Usage()
 		os.Exit(0)
 	}
-	if *entityFlag != "host" {
-		fmt.Fprint(os.Stdout, "Option not implemented, set entity to host.\n")
+	if *entityFlag != "host" && *entityFlag != "vm" {
+		fmt.Fprint(os.Stdout, "Option not implemented, set entity to host or vm.\n")
 		flag.Usage()
 		os.Exit(0)
 	}
@@ -110,14 +110,21 @@ func main() {
 	Run(func(ctx context.Context, c *vim25.Client) error {
 		// Create a view of HostSystem objects
 		m := view.NewManager(c)
-		if *entityFlag == "host" && *contextFlag == "status" {
-			v, err := m.CreateContainerView(ctx, c.ServiceContent.RootFolder, []string{"HostSystem"}, true)
+		var entityToQuery = ""
+		if *entityFlag == "host" {
+			entityToQuery = "HostSystem"
+		}
+		if *entityFlag == "vm" {
+			entityToQuery = "VirtualMachine"
+		}
+		if *contextFlag == "status" {
+			v, err := m.CreateContainerView(ctx, c.ServiceContent.RootFolder, []string{entityToQuery}, true)
 			if err != nil {
 				return err
 			}
 			defer v.Destroy(ctx)
-			return GetHostsStatus(ctx, err, v)
-		} else if *entityFlag == "host" && *contextFlag == "metrics" {
+			return GetHostsStatus(ctx, err, v, entityToQuery)
+		} else if *contextFlag == "metrics" {
 			if *metricsFlag == "" {
 				fmt.Fprint(os.Stdout, "You must specify metrics to query.\n")
 				flag.Usage()
@@ -147,12 +154,12 @@ func main() {
 				functions = []string{"last"}
 			}
 
-			v, err := m.CreateContainerView(ctx, c.ServiceContent.RootFolder, []string{"HostSystem"}, true)
+			v, err := m.CreateContainerView(ctx, c.ServiceContent.RootFolder, []string{entityToQuery}, true)
 			if err != nil {
 				return err
 			}
 			defer v.Destroy(ctx)
-			return GetHostMetrics(ctx, err, v, functions)
+			return GetHostMetrics(ctx, err, v, functions, entityToQuery)
 		}
 		fmt.Fprint(os.Stdout, "Option not implemented. Set host status or host metrics.\n")
 		flag.Usage()
@@ -161,9 +168,9 @@ func main() {
 	})
 }
 
-func GetHostMetrics(ctx context.Context, err error, v *view.ContainerView, functions []string) error {
+func GetHostMetrics(ctx context.Context, err error, v *view.ContainerView, functions []string, entityToQuery string) error {
 
-	vmsRefs, err := v.Find(ctx, []string{"HostSystem"}, nil)
+	vmsRefs, err := v.Find(ctx, []string{entityToQuery}, nil)
 	if err != nil {
 		return err
 	}
@@ -254,14 +261,12 @@ func GetHostMetrics(ctx context.Context, err error, v *view.ContainerView, funct
 					resultLine += fmt.Sprintf(";%.2f", result)
 				}
 				resultLine += fmt.Sprintf(";%s;", units)
-				if *instanceFlag != "*" {
-					results = append(results, resultLine)
-				}
 
 			}
 		}
 		// delete last semicolon character
 		resultLine = resultLine[:len(resultLine)-1]
+
 		results = append(results, resultLine)
 
 	}
@@ -273,10 +278,10 @@ func GetHostMetrics(ctx context.Context, err error, v *view.ContainerView, funct
 	return nil
 }
 
-func GetHostsStatus(ctx context.Context, err error, v *view.ContainerView) error {
+func GetHostsStatus(ctx context.Context, err error, v *view.ContainerView, entityToQuery string) error {
 	var hss []mo.HostSystem
 
-	err = v.Retrieve(ctx, []string{"HostSystem"}, []string{"summary"}, &hss)
+	err = v.Retrieve(ctx, []string{entityToQuery}, []string{"summary"}, &hss)
 
 	if err != nil {
 		return err
