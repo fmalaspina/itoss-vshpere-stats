@@ -253,13 +253,15 @@ func GetHostMetrics(ctx context.Context, err error, v *view.ContainerView, funct
 					}
 					resultLine += fmt.Sprintf(";%.2f", result)
 				}
-				resultLine += fmt.Sprintf(";%s", units)
+				resultLine += fmt.Sprintf(";%s;", units)
 				if *instanceFlag != "*" {
 					results = append(results, resultLine)
 				}
 
 			}
 		}
+		// delete last semicolon character
+		resultLine = resultLine[:len(resultLine)-1]
 		results = append(results, resultLine)
 
 	}
