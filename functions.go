@@ -9,7 +9,7 @@ import (
 	"strings"
 )
 
-func getHostName(ctx context.Context, v *view.ContainerView, entityToQuery string, name string) (string, error) {
+func getEntityName(ctx context.Context, v *view.ContainerView, entityToQuery string, name string) (string, error) {
 	var hss []mo.HostSystem
 
 	err := v.Retrieve(ctx, []string{entityToQuery}, []string{"summary"}, &hss)

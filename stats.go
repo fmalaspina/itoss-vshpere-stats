@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/vmware/govmomi/performance"
 	"github.com/vmware/govmomi/view"
@@ -12,6 +13,11 @@ import (
 
 func GetHostStats(ctx context.Context, err error, v *view.ContainerView, functions []string, entityToQuery string) error {
 
+	hostName, err := getEntityName(ctx, v, entityToQuery, *entityNameFlag)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error getting host name: %s\n", err)
+		os.Exit(1)
+	}
 	var metricsToQuery []string
 
 	if len(strings.Split(*metricsFlag, ",")) > 1 {
@@ -36,10 +42,6 @@ func GetHostStats(ctx context.Context, err error, v *view.ContainerView, functio
 
 	fmt.Println(title)
 
-	hostName, err := getHostName(ctx, v, entityToQuery, *entityNameFlag)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error getting host name: %s\n", err)
-	}
 	vmsRefs, err := v.Find(ctx, []string{entityToQuery}, nil)
 	if err != nil {
 		return err
@@ -52,9 +54,15 @@ func GetHostStats(ctx context.Context, err error, v *view.ContainerView, functio
 	counters, err := perfManager.CounterInfoByName(ctx)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error getting counters: %s\n", err)
-		os.Exit(0)
+		os.Exit(1)
 	}
 
+	// Check if the metrics to query exist
+	err = checkMetricExistence(counters, metricsToQuery)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, err.Error())
+		os.Exit(1)
+	}
 	// Create PerfQuerySpec
 	spec := types.PerfQuerySpec{
 		MaxSample:  int32(*maxSamplesFlag),
@@ -67,7 +75,7 @@ func GetHostStats(ctx context.Context, err error, v *view.ContainerView, functio
 	if err != nil {
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error getting metric: %s\n", err)
-			os.Exit(0)
+			os.Exit(1)
 		}
 	}
 
@@ -75,7 +83,7 @@ func GetHostStats(ctx context.Context, err error, v *view.ContainerView, functio
 	if err != nil {
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error getting metric series: %s\n", err)
-			os.Exit(0)
+			os.Exit(1)
 		}
 	}
 
@@ -96,11 +104,11 @@ func GetHostStats(ctx context.Context, err error, v *view.ContainerView, functio
 				instance = "-"
 			}
 
-			if len(v.Value) != 0 {
+			if v.Value != nil {
 				values, err := parseCSV(v.ValueCSV())
 				if err != nil {
 					fmt.Fprint(os.Stderr, "Error parsing metric CSV values: ", err, "\n")
-					os.Exit(0)
+					os.Exit(1)
 				}
 				//fmt.Printf("entity=%s;name=%s;instance=%s;metric=%s",
 				//	name.Type, name.Value, instance, v.Name)
@@ -111,13 +119,22 @@ func GetHostStats(ctx context.Context, err error, v *view.ContainerView, functio
 					result, err := applyFunction(values, function)
 					if err != nil {
 						fmt.Fprint(os.Stderr, "Error applying function:", err, "\n")
-						continue
+						os.Exit(1)
 					}
 					resultLine += fmt.Sprintf(";%.2f", result)
 				}
 				resultLine += fmt.Sprintf(";%s;", units)
+				if *instanceFlag != "" {
+					resultLine += "\n"
+				} else {
+					resultLine += "|"
+				}
 
+			} else {
+				fmt.Fprintf(os.Stderr, "No values found for metric %s\n", v.Name)
+				os.Exit(1)
 			}
+
 		}
 		// delete last semicolon character
 		resultLine = resultLine[:len(resultLine)-1]
@@ -129,13 +146,23 @@ func GetHostStats(ctx context.Context, err error, v *view.ContainerView, functio
 
 	metricFound := false
 	for _, result := range results {
+
 		metricFound = true
 		fmt.Println(result)
 	}
 	if !metricFound {
-		fmt.Fprintf(os.Stderr, "\nMetric %s not found\n", *entityNameFlag)
-		os.Exit(0)
+		fmt.Fprintf(os.Stderr, "\nMetric %s not found for entity \n", *entityNameFlag)
+		os.Exit(1)
 	}
 	return nil
 
+}
+
+func checkMetricExistence(counterMap map[string]*types.PerfCounterInfo, metricNames []string) error {
+	for _, key := range metricNames {
+		if _, exists := counterMap[key]; !exists {
+			return errors.New(fmt.Sprintf("Metric '%s' does not exist", key))
+		}
+	}
+	return nil
 }

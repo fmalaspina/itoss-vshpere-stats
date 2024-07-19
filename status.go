@@ -41,7 +41,6 @@ func GetHostsStatus(ctx context.Context, err error, v *view.ContainerView, entit
 	if !hostFound {
 		fmt.Fprintf(os.Stdout, "%s;%d;%s;%s;%v;%s;%s;%s;%s\n",
 			*entityNameFlag, 0, "NA", "NA", false, "NA", "NA", "NA", "HOST_NOT_FOUND")
-		fmt.Fprintf(os.Stderr, "\nHost %s not found\n", *entityNameFlag)
 		os.Exit(0)
 	}
 	return nil
