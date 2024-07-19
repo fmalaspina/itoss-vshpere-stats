@@ -104,7 +104,7 @@ func GetHostStats(ctx context.Context, err error, v *view.ContainerView, functio
 				instance = "-"
 			}
 
-			if v.Value != nil {
+			if len(v.Value) != 0 {
 				values, err := parseCSV(v.ValueCSV())
 				if err != nil {
 					fmt.Fprint(os.Stderr, "Error parsing metric CSV values: ", err, "\n")
@@ -151,7 +151,7 @@ func GetHostStats(ctx context.Context, err error, v *view.ContainerView, functio
 		fmt.Println(result)
 	}
 	if !metricFound {
-		fmt.Fprintf(os.Stderr, "\nMetric %s not found for entity \n", *entityNameFlag)
+		fmt.Fprintf(os.Stderr, "\nMetric not found for entity %s\n", *entityNameFlag)
 		os.Exit(1)
 	}
 	return nil
