@@ -45,3 +45,28 @@ func GetHostsStatus(ctx context.Context, err error, v *view.ContainerView, entit
 	}
 	return nil
 }
+
+func GetVMStatus(ctx context.Context, err error, v *view.ContainerView, entityToQuery string) error {
+
+	var hss []mo.VirtualMachine
+
+	err = v.Retrieve(ctx, []string{entityToQuery}, []string{"summary"}, &hss)
+
+	if err != nil {
+		return err
+	}
+
+	var vms []mo.VirtualMachine
+	err = v.Retrieve(ctx, []string{"VirtualMachine"}, []string{"summary"}, &vms)
+	if err != nil {
+		return err
+	}
+
+	// Print summary per vm (see also: govc/vm/info.go)
+
+	for _, vm := range vms {
+		fmt.Printf("%s: %s\n", vm.Summary.Config.Name, vm.Summary.Config.GuestFullName)
+	}
+
+	return nil
+}

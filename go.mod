@@ -1,5 +1,7 @@
 module itoss-vsphere-stats
 
+
+
 go 1.22.3
 
 require github.com/vmware/govmomi v0.38.0

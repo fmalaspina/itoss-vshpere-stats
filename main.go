@@ -18,8 +18,8 @@ import (
 var urlFlag = flag.String("url", "", "Required. Usage: -url <https://username:password@host/sdk> (domain users can be set as username@domain)")
 var insecureFlag = flag.Bool("insecure", false, "Required. Usage: -insecure")
 var entityFlag = flag.String("entity", "host", "Optional. Usage: -entity <host|vm>")
-var contextFlag = flag.String("context", "status", "Optional. Usage: -context <status|datastore|stats>")
-var entityNameFlag = flag.String("entityName", "all", "Optional. Usage: -entityName <host name| vm name")
+var contextFlag = flag.String("context", "status", "Optional. Usage: -context <status|stats|datastore>")
+var entityNameFlag = flag.String("entityName", "all", "Optional. Usage: -entityName <host name| vm name>")
 var timeoutFlag = flag.Duration("timeout", 10*time.Second, "Optional. Usage: -timeout <timeout in duration Ex.: 10s (ms,h,m can be used as well)>")
 var intervalFlag = flag.Int("i", 20, "Optional. Usage: -i <interval id>")
 var metricsFlag = flag.String("metrics", "cpu.usage.average", "For context stats only. Optional. Usage: -metrics <cpu.usage.average,mem.usage.average>")
@@ -109,19 +109,20 @@ func Run(f func(context.Context, *vim25.Client) error) {
 func main() {
 	flag.Parse()
 	if *versionFlag {
-		fmt.Fprint(os.Stdout, "Version: 1.0.003\n")
+		fmt.Fprint(os.Stdout, "Version: 1.0.004\n")
 		os.Exit(0)
 	}
 	Run(func(ctx context.Context, c *vim25.Client) error {
 		// Create a view of HostSystem objects
 		m := view.NewManager(c)
+
 		var entityToQuery = ""
 
 		if *entityFlag == "host" {
 			entityToQuery = "HostSystem"
 		}
-
 		if *contextFlag == "datastore" {
+
 			entityToQuery = "Datastore"
 		}
 
@@ -136,9 +137,17 @@ func main() {
 		defer v.Destroy(ctx)
 
 		if *contextFlag == "status" {
-			return GetHostsStatus(ctx, err, v, entityToQuery)
+			if *entityFlag == "host" {
+				return GetHostsStatus(ctx, err, v, entityToQuery)
+			} else if *entityFlag == "vm" {
+				return GetVMStatus(ctx, err, v, entityToQuery)
+			} else {
+				fmt.Fprint(os.Stdout, "You must specify entity to query.\n")
+				flag.Usage()
+				os.Exit(1)
+			}
 		} else if *contextFlag == "datastore" {
-			return GetDatastoreStatus(ctx, err, v)
+			return GetDatastoreStatus(ctx, c, err)
 		} else if *contextFlag == "stats" {
 			if *metricsFlag == "" {
 				fmt.Fprint(os.Stdout, "You must specify metrics to query.\n")
@@ -173,8 +182,13 @@ func main() {
 			//if err != nil {
 			//	return err
 			//}
-
+			//if *entityFlag == "host" {
 			return GetHostStats(ctx, err, v, functions, entityToQuery)
+			//}
+			//if *entityFlag == "vm" {
+			//	return GetVMStats(ctx, err, v, functions, entityToQuery)
+			//}
+
 		}
 		fmt.Fprint(os.Stdout, "Option not implemented. Set host status or host metrics.\n")
 		flag.Usage()
