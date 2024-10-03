@@ -5,19 +5,73 @@ import (
 	"errors"
 	"fmt"
 	"github.com/vmware/govmomi/performance"
+	"github.com/vmware/govmomi/property"
 	"github.com/vmware/govmomi/view"
+	"github.com/vmware/govmomi/vim25"
+	"github.com/vmware/govmomi/vim25/mo"
 	"github.com/vmware/govmomi/vim25/types"
 	"os"
 	"strings"
 )
 
-func GetHostStats(ctx context.Context, err error, v *view.ContainerView, functions []string, entityToQuery string) error {
+func GetHostStats(ctx context.Context, c *vim25.Client, functions []string) error {
+	m := view.NewManager(c)
+	v, err := m.CreateContainerView(ctx, c.ServiceContent.RootFolder, []string{"HostSystem"}, true)
+	if err != nil {
+		return err
+	}
+	defer v.Destroy(ctx)
+	var hss []mo.HostSystem
+	err = v.RetrieveWithFilter(ctx, []string{"HostSystem"}, []string{"summary"}, &hss, property.Match{"name": *entityNameFlag})
+	//if err != nil {
+	//	return err
+	//}
+	//	hostName, err := getHostName(ctx, v, *entityNameFlag)
 
-	hostName, err := getEntityName(ctx, v, entityToQuery, *entityNameFlag)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error getting host name: %s\n", err)
 		os.Exit(1)
 	}
+
+	var hostNames []string
+
+	var internalHostnames = make(map[string]string)
+	// Iterate over the host systems and collect names
+	for _, hs := range hss {
+		hostNames = append(hostNames, hs.Summary.Host.Value)
+		internalHostnames[hs.Summary.Host.Value] = hs.Summary.Config.Name
+	}
+	return getStats(ctx, err, v, functions, "HostSystem", hostNames, internalHostnames)
+
+}
+
+func GetVMStats(ctx context.Context, c *vim25.Client, functions []string) error {
+	m := view.NewManager(c)
+	v, err := m.CreateContainerView(ctx, c.ServiceContent.RootFolder, []string{"VirtualMachine"}, true)
+	if err != nil {
+		return err
+	}
+	defer v.Destroy(ctx)
+
+	var vms []mo.VirtualMachine
+	err = v.RetrieveWithFilter(ctx, []string{"VirtualMachine"}, []string{"summary"}, &vms, property.Match{"name": *entityNameFlag})
+	var vmNames []string
+	var internalVMNames = make(map[string]string)
+	// Iterate over the host systems and collect names
+	for _, vm := range vms {
+
+		vmNames = append(vmNames, vm.Summary.Vm.Value)
+		internalVMNames[vm.Summary.Vm.Value] = vm.Summary.Config.Name
+	}
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error getting vm name: %s\n", err)
+		os.Exit(1)
+	}
+	return getStats(ctx, err, v, functions, "VirtualMachine", vmNames, internalVMNames)
+
+}
+
+func getStats(ctx context.Context, err error, v *view.ContainerView, functions []string, entityToQuery string, names []string, internalNames map[string]string) error {
 	var metricsToQuery []string
 
 	if len(strings.Split(*metricsFlag, ",")) > 1 {
@@ -31,7 +85,7 @@ func GetHostStats(ctx context.Context, err error, v *view.ContainerView, functio
 	title := ""
 
 	for range metricsToQuery {
-		title += "entity;name;instance;metric"
+		title += "entity;name;internalName;instance;metric"
 		for _, function := range functions {
 			title += ";" + function
 		}
@@ -92,7 +146,7 @@ func GetHostStats(ctx context.Context, err error, v *view.ContainerView, functio
 	for _, metric := range result {
 		resultLine := ""
 		name := metric.Entity
-		if *entityNameFlag != "all" && name.Value != hostName {
+		if *entityNameFlag != "*" && !contains(names, name.Value) {
 			continue
 		}
 		for _, v := range metric.Value {
@@ -112,8 +166,8 @@ func GetHostStats(ctx context.Context, err error, v *view.ContainerView, functio
 				}
 				//fmt.Printf("entity=%s;name=%s;instance=%s;metric=%s",
 				//	name.Type, name.Value, instance, v.Name)
-				resultLine += fmt.Sprintf("%s;%s;%s;%s",
-					name.Type, *entityNameFlag, instance, v.Name)
+				resultLine += fmt.Sprintf("%s;%s;%s;%s;%s",
+					name.Type, internalNames[name.Value], name.Value, instance, v.Name)
 
 				for _, function := range functions {
 					result, err := applyFunction(values, function)
@@ -155,7 +209,6 @@ func GetHostStats(ctx context.Context, err error, v *view.ContainerView, functio
 		os.Exit(1)
 	}
 	return nil
-
 }
 
 func checkMetricExistence(counterMap map[string]*types.PerfCounterInfo, metricNames []string) error {

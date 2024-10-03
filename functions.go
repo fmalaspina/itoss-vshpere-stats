@@ -3,16 +3,80 @@ package main
 import (
 	"context"
 	"fmt"
+	"github.com/vmware/govmomi/property"
 	"github.com/vmware/govmomi/view"
 	"github.com/vmware/govmomi/vim25/mo"
 	"strconv"
 	"strings"
+	"time"
 )
 
-func getEntityName(ctx context.Context, v *view.ContainerView, entityToQuery string, name string) (string, error) {
+func safeValue(value interface{}) interface{} {
+	switch v := value.(type) {
+	case *string:
+		if v == nil {
+			return "NA"
+		}
+		return *v
+	case *time.Time:
+		if v == nil {
+			return "NA"
+		}
+		return v.Format("2006-01-02 15:04:05")
+	case interface{}:
+		if v == nil {
+			return "NA"
+		}
+		return v
+	default:
+		return value
+	}
+}
+
+func getVMName(ctx context.Context, v *view.ContainerView, name string) (string, error) {
+	var hss []mo.VirtualMachine
+
+	err := v.Retrieve(ctx, []string{"VirtualMachine"}, []string{"summary"}, &hss)
+	if err != nil {
+		return "", err
+	}
+	for _, hs := range hss {
+		if hs.Summary.Config.Name == name {
+			return hs.Summary.Vm.Value, nil
+		}
+	}
+	return "", fmt.Errorf("vm %s not found", name)
+}
+
+func parseMap(s string) map[string]string {
+	result := make(map[string]string)
+
+	// Split the input string by comma to separate key-value pairs
+	pairs := strings.Split(s, ",")
+	for _, pair := range pairs {
+		// Split each pair by the equals sign
+		keyValue := strings.SplitN(pair, "=", 2)
+		if len(keyValue) == 2 {
+			key := keyValue[0]
+			value := keyValue[1]
+			result[key] = value
+		}
+	}
+	return result
+}
+func contains(names []string, value string) bool {
+	for _, name := range names {
+		if name == value {
+			return true
+		}
+	}
+	return false
+}
+func getHostName(ctx context.Context, v *view.ContainerView, name string) (string, error) {
+
 	var hss []mo.HostSystem
 
-	err := v.Retrieve(ctx, []string{entityToQuery}, []string{"summary"}, &hss)
+	err := v.RetrieveWithFilter(ctx, []string{"HostSystem"}, []string{"summary"}, &hss, property.Match{"name": name})
 	if err != nil {
 		return "", err
 	}
