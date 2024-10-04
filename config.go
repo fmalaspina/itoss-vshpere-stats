@@ -50,9 +50,11 @@ func GetHostsConfig(ctx context.Context, c *vim25.Client) error {
 		hostFound = true
 	}
 	if !hostFound {
-		fmt.Fprintf(os.Stdout, "%s;%s;%s;%v;%s;%v;%v;%v;%s;%s;%s;%s\n",
-			*entityNameFlag, "NA", "NA", "NA", "NA", "NA", "NA", "NA", "NA", "NA", "NA", "NA")
-		os.Exit(0)
+		//fmt.Fprintf(os.Stdout, "%s;%s;%s;%v;%s;%v;%v;%v;%s;%s;%s;%s\n",
+		//	*entityNameFlag, "NA", "NA", "NA", "NA", "NA", "NA", "NA", "NA", "NA", "NA", "HOST_NOT_FOUND")
+		//os.Exit(0)
+		fmt.Fprintf(os.Stderr, "\nError: %s\n", "Host not found.")
+		os.Exit(1)
 	}
 	return nil
 }
@@ -96,9 +98,11 @@ func GetVMConfig(ctx context.Context, c *vim25.Client) error {
 		vmFound = true
 	}
 	if !vmFound {
-		fmt.Fprintf(os.Stdout, "%s;%s;%s;%s;%s;%s\n",
-			*entityNameFlag, "NA", "NA", "NA", "NA", "NA")
-		os.Exit(0)
+		//fmt.Fprintf(os.Stdout, "%s;%s;%s;%s;%s;%s\n",
+		//	*entityNameFlag, "NA", "NA", "NA", "NA", "NA")
+		//os.Exit(0)
+		fmt.Fprintf(os.Stderr, "\nError: %s\n", "VM not found.")
+		os.Exit(1)
 	}
 	return nil
 }

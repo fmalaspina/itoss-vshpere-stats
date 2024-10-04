@@ -61,13 +61,14 @@ func Run(f func(context.Context, *vim25.Client) error) {
 	flag.Parse()
 	var err error
 	var c *vim25.Client
-
-	if *contextFlag != "status" && *contextFlag != "stats" && *contextFlag != "sensors" && *contextFlag != "config" {
+	allowedContexts := "status,stats,sensors,config"
+	if !strings.Contains(allowedContexts, *contextFlag) {
 		fmt.Fprint(os.Stdout, "Option not implemented, set context to status, stats, config or sensors.\n")
 		flag.Usage()
 		os.Exit(1)
 	}
-	if *entityFlag != "host" && *entityFlag != "vm" && *entityFlag != "cluster" && *entityFlag != "datastore" {
+	allowedEntities := "host,vm,cluster,datastore,resourcePool"
+	if !strings.Contains(allowedEntities, *entityFlag) {
 		fmt.Fprint(os.Stdout, "Option not implemented, set entity to host, vm, cluster, datastore or resourcePool.\n")
 		flag.Usage()
 		os.Exit(1)
@@ -98,30 +99,7 @@ func Run(f func(context.Context, *vim25.Client) error) {
 
 	if err != nil {
 		if *contextFlag == "status" {
-			if *entityFlag == "host" {
-				fmt.Fprint(os.Stdout, "host;uptimeSec;overallStatus;connectionState;inMaintenanceMode;powerState;standbyMode;bootTime;proxyStatus\n")
-				fmt.Fprintf(os.Stdout, "%s;%d;%s;%s;%v;%s;%s;%s;%s\n",
-					"NA", 0, "NA", "NA", false, "NA", "NA", "NA", errorText)
-				os.Exit(0)
-			}
-			if *entityFlag == "vm" {
-				fmt.Fprint(os.Stdout, "name;internalName;overallStatus;connectionState;powerState;guestHeartbeatStatus;bootTime;uptimeSeconds;proxyStatus\n")
-				fmt.Fprintf(os.Stdout, "%s;%s;%s;%s;%s;%s;%s;%v;%s\n",
-					"NA", "NA", "NA", "NA", "NA", "NA", "NA", 0, errorText)
-				os.Exit(0)
-			}
-			if *entityFlag == "datastore" {
-				fmt.Fprint(os.Stdout, "name;host;internalHostname;type;maintenanceMode;capacity;freeSpace;uncommitted;accessible;proxyStatus\n")
-				fmt.Fprintf(os.Stdout, "%s;%s;%s;%s;%s;%s;%s;%v;%s;%s\n",
-					"NA", "NA", "NA", "NA", "NA", "NA", "NA", 0, "NA", errorText)
-				os.Exit(0)
-			}
-			if *entityFlag == "cluster" {
-				fmt.Fprint(os.Stdout, "to be implemented\n")
-				fmt.Fprintf(os.Stdout, "%s;%s\n",
-					"NA", errorText)
-				os.Exit(0)
-			}
+			showEntityStatusErrorAndExit(errorText)
 		}
 	}
 	if *contextFlag != "status" {
@@ -129,41 +107,58 @@ func Run(f func(context.Context, *vim25.Client) error) {
 		os.Exit(1)
 	}
 }
+
+func showEntityStatusErrorAndExit(errorText string) {
+	switch *entityFlag {
+	case "host":
+		showHostStatusError(errorText)
+	case "vm":
+		showVMStatusError(errorText)
+	case "datastore":
+		showDatastoreStatusError(errorText)
+	case "cluster":
+		showClusterError(errorText)
+	}
+}
+
+func showClusterError(errorText string) {
+	fmt.Fprint(os.Stdout, "cluster;totalCpu;totalMemory;numCpuCores;numCpuThreads;effectiveCpu;effectiveMemory;numHosts;numEffectiveHosts;overallStatus;proxyStatus\n")
+
+	fmt.Fprintf(os.Stdout, "%s;%d;%d;%d;%d;%d;%d;%d;%d;%s;%s\n",
+		*entityNameFlag, 0, 0, 0, 0, 0, 0, 0, 0, "NA", errorText)
+	os.Exit(0)
+}
+
+func showDatastoreStatusError(errorText string) {
+	fmt.Fprint(os.Stdout, "name;host;internalHostname;type;maintenanceMode;capacity;freeSpace;uncommitted;accessible;proxyStatus\n")
+	fmt.Fprintf(os.Stdout, "%s;%s;%s;%s;%s;%s;%s;%v;%s;%s\n",
+		"NA", "NA", "NA", "NA", "NA", "NA", "NA", 0, "NA", errorText)
+	os.Exit(0)
+}
+
+func showVMStatusError(errorText string) {
+	fmt.Fprint(os.Stdout, "name;internalName;overallStatus;connectionState;powerState;guestHeartbeatStatus;bootTime;uptimeSeconds;proxyStatus\n")
+	fmt.Fprintf(os.Stdout, "%s;%s;%s;%s;%s;%s;%s;%v;%s\n",
+		"NA", "NA", "NA", "NA", "NA", "NA", "NA", 0, errorText)
+	os.Exit(0)
+}
+
+func showHostStatusError(errorText string) {
+	fmt.Fprint(os.Stdout, "host;uptimeSec;overallStatus;connectionState;inMaintenanceMode;powerState;standbyMode;bootTime;proxyStatus\n")
+	fmt.Fprintf(os.Stdout, "%s;%d;%s;%s;%v;%s;%s;%s;%s\n",
+		"NA", 0, "NA", "NA", false, "NA", "NA", "NA", errorText)
+	os.Exit(0)
+}
 func main() {
 	flag.Parse()
 	if *versionFlag {
-		fmt.Fprint(os.Stdout, "Version: 1.0.019\n")
+		fmt.Fprint(os.Stdout, "Version: 1.0.020\n")
 		os.Exit(0)
 	}
 	Run(func(ctx context.Context, c *vim25.Client) error {
-		// Create a view of HostSystem objects
-		//m := view.NewManager(c)
+		switch *contextFlag {
 
-		//var entityToQuery = ""
-		//
-		//if *entityFlag == "host" {
-		//	entityToQuery = "HostSystem"
-		//}
-		//if *contextFlag == "datastore" {
-		//
-		//	entityToQuery = "Datastore"
-		//}
-		//
-		//if *entityFlag == "vm" {
-		//	entityToQuery = "VirtualMachine"
-		//}
-		//
-		//if *entityFlag == "cluster" {
-		//	entityToQuery = "ClusterComputeResource"
-		//}
-		//
-		//v, err := m.CreateContainerView(ctx, c.ServiceContent.RootFolder, []string{entityToQuery}, true)
-		//if err != nil {
-		//	return err
-		//}
-		//defer v.Destroy(ctx)
-
-		if *contextFlag == "status" {
+		case "status":
 			if *entityFlag == "host" {
 				return GetHostsStatus(ctx, c)
 			} else if *entityFlag == "vm" {
@@ -173,11 +168,10 @@ func main() {
 			} else if *entityFlag == "datastore" {
 				return GetDatastoreStatus(ctx, c)
 			} else {
-				fmt.Fprint(os.Stdout, "You must specify entity to query.\n")
-				flag.Usage()
-				os.Exit(1)
+				showNotImplementedError()
+
 			}
-		} else if *contextFlag == "stats" {
+		case "stats":
 			if *metricsFlag == "" {
 				fmt.Fprint(os.Stdout, "You must specify metrics to query.\n")
 				flag.Usage()
@@ -207,30 +201,41 @@ func main() {
 				functions = []string{"last"}
 			}
 
-			//v, err := m.CreateContainerView(ctx, c.ServiceContent.RootFolder, []string{entityToQuery}, true)
-			//if err != nil {
-			//	return err
-			//}
 			if *entityFlag == "host" {
 				return GetHostStats(ctx, c, functions)
 			} else if *entityFlag == "vm" {
 				return GetVMStats(ctx, c, functions)
+			} else {
+				showNotImplementedError()
 			}
 
-		} else if *contextFlag == "sensors" {
+		case "sensors":
 			if *entityFlag == "host" {
 				return GetHostsSensors(ctx, c)
+			} else {
+				showNotImplementedError()
+
 			}
-		} else if *contextFlag == "config" {
+
+		case "config":
 			if *entityFlag == "host" {
 				return GetHostsConfig(ctx, c)
 			} else if *entityFlag == "vm" {
 				return GetVMConfig(ctx, c)
+			} else {
+				showNotImplementedError()
 			}
+		default:
+
+			showNotImplementedError()
+
 		}
-		fmt.Fprint(os.Stdout, "Option not implemented. Set host status or host metrics.\n")
-		flag.Usage()
-		os.Exit(1)
 		return nil
 	})
+}
+
+func showNotImplementedError() {
+	fmt.Fprint(os.Stdout, "Option not implemented.\n")
+	flag.Usage()
+	os.Exit(1)
 }

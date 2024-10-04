@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"github.com/kr/pretty"
 	"github.com/vmware/govmomi/property"
 	"github.com/vmware/govmomi/view"
 	"github.com/vmware/govmomi/vim25"
@@ -15,13 +14,41 @@ func GetClusterStatus(ctx context.Context, c *vim25.Client) error {
 	m := view.NewManager(c)
 	v, err := m.CreateContainerView(ctx, c.ServiceContent.RootFolder, []string{"ClusterComputeResource"}, true)
 	if err != nil {
-		return err
+		showClusterError(err.Error())
 	}
 	defer v.Destroy(ctx)
 	var ccr []mo.ClusterComputeResource
 
-	err = v.RetrieveWithFilter(ctx, []string{"ClusterComputeResource"}, []string{"computeResource", "managedEntity", "summary"}, &ccr, property.Match{"name": *entityNameFlag})
-	pretty.Print(ccr)
+	err = v.RetrieveWithFilter(ctx, []string{"ClusterComputeResource"}, []string{"computeResource", "managedEntity", "summary", "extensibleManagedObject"}, &ccr, property.Match{"self.value": *entityNameFlag})
+	if err != nil {
+		showClusterError(err.Error())
+	}
+	clusterFound := false
+
+	fmt.Fprint(os.Stdout, "cluster;totalCpu;totalMemory;numCpuCores;numCpuThreads;effectiveCpu;effectiveMemory;numHosts;numEffectiveHosts;overallStatus\n")
+	for _, cr := range ccr {
+
+		fmt.Fprintf(os.Stdout, "%s;%d;%d;%d;%d;%d;%d;%d;%d;%s;%s\n",
+			safeValue(cr.ManagedEntity.ExtensibleManagedObject.Self.Value),
+			safeValue(cr.Summary.GetComputeResourceSummary().TotalCpu),
+			safeValue(cr.Summary.GetComputeResourceSummary().TotalMemory),
+			safeValue(cr.Summary.GetComputeResourceSummary().NumCpuCores),
+			safeValue(cr.Summary.GetComputeResourceSummary().NumCpuThreads),
+			safeValue(cr.Summary.GetComputeResourceSummary().EffectiveCpu),
+			safeValue(cr.Summary.GetComputeResourceSummary().EffectiveMemory),
+			safeValue(cr.Summary.GetComputeResourceSummary().NumHosts),
+			safeValue(cr.Summary.GetComputeResourceSummary().NumEffectiveHosts),
+			safeValue(cr.Summary.GetComputeResourceSummary().OverallStatus),
+			"OK")
+
+		clusterFound = true
+	}
+	if !clusterFound {
+		//fmt.Fprintf(os.Stdout, "%s;%d;%d;%d;%d;%d;%d;%d;%d;%s;%s\n",
+		//	*entityNameFlag, 0, 0, 0, 0, 0, 0, 0, 0, "NA", "CLUSTER_NOT_FOUND")
+		//os.Exit(0)
+		showClusterError("CLUSTER_NOT_FOUND")
+	}
 	return nil
 
 }
@@ -30,7 +57,7 @@ func GetHostsStatus(ctx context.Context, c *vim25.Client) error {
 	m := view.NewManager(c)
 	vHost, err := m.CreateContainerView(ctx, c.ServiceContent.RootFolder, []string{"HostSystem"}, true)
 	if err != nil {
-		return err
+		showHostStatusError(err.Error())
 	}
 	defer vHost.Destroy(ctx)
 
@@ -39,15 +66,12 @@ func GetHostsStatus(ctx context.Context, c *vim25.Client) error {
 	err = vHost.RetrieveWithFilter(ctx, []string{"HostSystem"}, []string{"summary"}, &hss, property.Match{"name": *entityNameFlag})
 
 	if err != nil {
-		return err
+		showHostStatusError(err.Error())
 	}
 	hostFound := false
 
 	fmt.Fprint(os.Stdout, "host;uptimeSec;overallStatus;connectionState;inMaintenanceMode;powerState;standbyMode;bootTime;proxyStatus\n")
 	for _, hs := range hss {
-		//if *entityNameFlag != "all" && hs.Summary.Config.Name != *entityNameFlag {
-		//	continue
-		//}
 
 		fmt.Fprintf(os.Stdout, "%s;%d;%s;%s;%v;%s;%s;%s;%s\n",
 			safeValue(hs.Summary.Config.Name),
@@ -63,9 +87,10 @@ func GetHostsStatus(ctx context.Context, c *vim25.Client) error {
 		hostFound = true
 	}
 	if !hostFound {
-		fmt.Fprintf(os.Stdout, "%s;%d;%s;%s;%v;%s;%s;%s;%s\n",
-			*entityNameFlag, 0, "NA", "NA", false, "NA", "NA", "NA", "HOST_NOT_FOUND")
-		os.Exit(0)
+		//fmt.Fprintf(os.Stdout, "%s;%d;%s;%s;%v;%s;%s;%s;%s\n",
+		//	*entityNameFlag, 0, "NA", "NA", false, "NA", "NA", "NA", "HOST_NOT_FOUND")
+		//os.Exit(0)
+		showHostStatusError("HOST_NOT_FOUND")
 	}
 	return nil
 }
@@ -74,7 +99,7 @@ func GetVMStatus(ctx context.Context, c *vim25.Client) error {
 	m := view.NewManager(c)
 	v, err := m.CreateContainerView(ctx, c.ServiceContent.RootFolder, []string{"VirtualMachine"}, true)
 	if err != nil {
-		return err
+		showVMStatusError(err.Error())
 	}
 	defer v.Destroy(ctx)
 	var vms []mo.VirtualMachine
@@ -82,16 +107,13 @@ func GetVMStatus(ctx context.Context, c *vim25.Client) error {
 	err = v.RetrieveWithFilter(ctx, []string{"VirtualMachine"}, []string{"summary"}, &vms, property.Match{"name": *entityNameFlag})
 
 	if err != nil {
-		return err
+		showVMStatusError(err.Error())
 	}
 
 	vmFound := false
 
 	fmt.Fprint(os.Stdout, "name;internalName;overallStatus;connectionState;powerState;guestHeartbeatStatus;bootTime;uptimeSeconds;proxyStatus\n")
 	for _, vm := range vms {
-		//if *entityNameFlag != "all" && vm.Summary.Config.Name != *entityNameFlag {
-		//	continue
-		//}
 
 		fmt.Fprintf(os.Stdout, "%s;%s;%s;%s;%s;%s;%s;%v;%s\n",
 			safeValue(vm.Summary.Config.Name),
@@ -107,9 +129,10 @@ func GetVMStatus(ctx context.Context, c *vim25.Client) error {
 		vmFound = true
 	}
 	if !vmFound {
-		fmt.Fprintf(os.Stdout, "%s;%s;%s;%s;%s;%s;%s;%v;%s\n",
-			*entityNameFlag, "NA", "NA", "NA", "NA", "NA", "NA", 0, "VM_NOT_FOUND")
-		os.Exit(0)
+		//fmt.Fprintf(os.Stdout, "%s;%s;%s;%s;%s;%s;%s;%v;%s\n",
+		//	*entityNameFlag, "NA", "NA", "NA", "NA", "NA", "NA", 0, "VM_NOT_FOUND")
+		//os.Exit(0)
+		showVMStatusError("VM_NOT_FOUND")
 	}
 	return nil
 }
@@ -119,7 +142,7 @@ func GetDatastoreStatus(ctx context.Context, c *vim25.Client) error {
 
 	vDatastore, err := m.CreateContainerView(ctx, c.ServiceContent.RootFolder, []string{"Datastore"}, true)
 	if err != nil {
-		return err
+		showDatastoreStatusError(err.Error())
 	}
 	defer vDatastore.Destroy(ctx)
 
@@ -132,9 +155,9 @@ func GetDatastoreStatus(ctx context.Context, c *vim25.Client) error {
 	err = vDatastore.RetrieveWithFilter(ctx, []string{"Datastore"}, []string{"summary", "host", "info", "vm"}, &dss, property.Match{"name": *entityNameFlag})
 
 	if err != nil {
-		return err
+		showDatastoreStatusError(err.Error())
 	}
-
+	datastoreFound := false
 	// Iterate over the filtered datastores
 	for _, ds := range dss {
 		fmt.Fprintf(os.Stdout, "%s;%s;%v;%v;%v;%v;%v\n",
@@ -145,7 +168,10 @@ func GetDatastoreStatus(ctx context.Context, c *vim25.Client) error {
 			safeValue(ds.Summary.FreeSpace),
 			safeValue(ds.Summary.Uncommitted),
 			safeValue(ds.Summary.Accessible))
+		datastoreFound = true
 	}
-
+	if !datastoreFound {
+		showDatastoreStatusError("DATASTORE_NOT_FOUND")
+	}
 	return nil
 }
