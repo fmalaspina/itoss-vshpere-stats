@@ -8,6 +8,7 @@ import (
 	"github.com/vmware/govmomi/vim25"
 	"github.com/vmware/govmomi/vim25/mo"
 	"os"
+	"strings"
 )
 
 func GetClusterStatus(ctx context.Context, c *vim25.Client) error {
@@ -19,7 +20,7 @@ func GetClusterStatus(ctx context.Context, c *vim25.Client) error {
 	defer v.Destroy(ctx)
 	var ccr []mo.ClusterComputeResource
 
-	err = v.RetrieveWithFilter(ctx, []string{"ClusterComputeResource"}, []string{"computeResource", "managedEntity", "summary", "extensibleManagedObject"}, &ccr, property.Match{"self.value": *entityNameFlag})
+	err = v.RetrieveWithFilter(ctx, []string{"ClusterComputeResource"}, []string{"computeResource", "managedEntity", "summary", "extensibleManagedObject"}, &ccr, property.Match{"self.value": entityNameFlag})
 	if err != nil {
 		showClusterError(err.Error())
 	}
@@ -63,7 +64,7 @@ func GetHostsStatus(ctx context.Context, c *vim25.Client) error {
 
 	var hss []mo.HostSystem
 
-	err = vHost.RetrieveWithFilter(ctx, []string{"HostSystem"}, []string{"summary"}, &hss, property.Match{"name": *entityNameFlag})
+	err = vHost.RetrieveWithFilter(ctx, []string{"HostSystem"}, []string{"summary"}, &hss, property.Match{"name": entityNameFlag})
 
 	if err != nil {
 		showHostStatusError(err.Error())
@@ -104,7 +105,7 @@ func GetVMStatus(ctx context.Context, c *vim25.Client) error {
 	defer v.Destroy(ctx)
 	var vms []mo.VirtualMachine
 
-	err = v.RetrieveWithFilter(ctx, []string{"VirtualMachine"}, []string{"summary"}, &vms, property.Match{"name": *entityNameFlag})
+	err = v.RetrieveWithFilter(ctx, []string{"VirtualMachine"}, []string{"summary"}, &vms, property.Match{"name": entityNameFlag})
 
 	if err != nil {
 		showVMStatusError(err.Error())
@@ -138,6 +139,19 @@ func GetVMStatus(ctx context.Context, c *vim25.Client) error {
 }
 
 func GetDatastoreStatus(ctx context.Context, c *vim25.Client) error {
+
+	// getHostNames using hostedByFlag
+	//var hostName string
+	var err error
+	var hostNames []string
+	if hostedByFlag != "*" {
+		hostNames, err = getHostNames(ctx, c, hostedByFlag)
+	}
+
+	if err != nil {
+		showHostStatusError(err.Error())
+	}
+
 	m := view.NewManager(c)
 
 	vDatastore, err := m.CreateContainerView(ctx, c.ServiceContent.RootFolder, []string{"Datastore"}, true)
@@ -146,13 +160,13 @@ func GetDatastoreStatus(ctx context.Context, c *vim25.Client) error {
 	}
 	defer vDatastore.Destroy(ctx)
 
-	fmt.Fprint(os.Stdout, "name;type;maintenanceMode;capacity;freeSpace;uncommitted;accessible\n")
+	fmt.Fprint(os.Stdout, "name;type;maintenanceMode;capacity;freeSpace;uncommitted;accessible;hostedBy;hostedByInternal\n")
 
 	// Destination slice to hold the result
 	var dss []mo.Datastore
 
 	// Retrieve datastores the match the filter
-	err = vDatastore.RetrieveWithFilter(ctx, []string{"Datastore"}, []string{"summary", "host", "info", "vm"}, &dss, property.Match{"name": *entityNameFlag})
+	err = vDatastore.RetrieveWithFilter(ctx, []string{"Datastore"}, []string{"summary", "host", "info", "vm"}, &dss, property.Match{"name": entityNameFlag})
 
 	if err != nil {
 		showDatastoreStatusError(err.Error())
@@ -160,14 +174,28 @@ func GetDatastoreStatus(ctx context.Context, c *vim25.Client) error {
 	datastoreFound := false
 	// Iterate over the filtered datastores
 	for _, ds := range dss {
-		fmt.Fprintf(os.Stdout, "%s;%s;%v;%v;%v;%v;%v\n",
+		// If the datastore is not hosted by the host, skip it
+		var internalHostValues []string
+		for _, host := range ds.Host {
+			if hostedByFlag != "*" {
+				if !contains(hostNames, host.Key.Value) {
+					continue
+
+				}
+			}
+			internalHostValues = append(internalHostValues, host.Key.Value)
+		}
+		fmt.Fprintf(os.Stdout, "%s;%s;%v;%v;%v;%v;%v;%s;%s\n",
 			safeValue(ds.Summary.Name),
 			safeValue(ds.Summary.Type),
 			safeValue(ds.Summary.MaintenanceMode),
 			safeValue(ds.Summary.Capacity),
 			safeValue(ds.Summary.FreeSpace),
 			safeValue(ds.Summary.Uncommitted),
-			safeValue(ds.Summary.Accessible))
+			safeValue(ds.Summary.Accessible),
+			safeValue(hostedByFlag),
+			safeValue(strings.Join(internalHostValues, ",")))
+
 		datastoreFound = true
 	}
 	if !datastoreFound {

@@ -3,8 +3,8 @@ package main
 import (
 	"context"
 	"errors"
-	"flag"
 	"fmt"
+	"github.com/spf13/cobra"
 	"github.com/vmware/govmomi/session/cache"
 	"github.com/vmware/govmomi/simulator"
 	"github.com/vmware/govmomi/vim25"
@@ -14,35 +14,30 @@ import (
 	"time"
 )
 
-var urlFlag = flag.String("url", "", "Required. Usage: -url <https://username:password@host/sdk> (domain users can be set as username@domain)")
-var insecureFlag = flag.Bool("insecure", false, "Required. Usage: -insecure")
-var entityFlag = flag.String("entity", "host", "Optional. Usage: -entity <host|vm|cluster|datastore|resourcePool>")
-var contextFlag = flag.String("context", "status", "Optional. Usage: -context <status|stats|sensors|config>")
-var entityNameFlag = flag.String("entityName", "*", "Optional. Usage: -entityName <host name| vm name |datastore name| cluster name| resourcePool name>")
-
-// add filter for datastore
-// var filterFlag = flag.String("filter", "", "Optional. Usage: -filter <host:name>")
-var timeoutFlag = flag.Duration("timeout", 10*time.Second, "Optional. Usage: -timeout <timeout in duration Ex.: 10s (ms,h,m can be used as well)>")
-var intervalFlag = flag.Int("i", 20, "Optional. Usage: -i <interval id>")
-var metricsFlag = flag.String("metrics", "cpu.usage.average", "For context stats only. Optional. Usage: -metrics <cpu.usage.average,mem.usage.average>")
-var functionsFlag = flag.String("functions", "last", "For context stats only. Optional. Usage: -functions <min,max,avg,last>")
-var maxSamplesFlag = flag.Int("maxSamples", 1, "For context stats only. Optional. Usage: -maxSamples <number of samples>")
-var instanceFlag = flag.String("instance", "", "For context stats only. Optional. Usage: -instance <instance name> (default is -)")
-var versionFlag = flag.Bool("version", false, "Optional. Usage: -version")
+var (
+	urlFlag        string
+	insecureFlag   bool
+	entityFlag     string
+	entityNameFlag string
+	hostedByFlag   string
+	timeoutFlag    time.Duration
+	intervalFlag   int
+	metricsFlag    string
+	functionsFlag  string
+	maxSamplesFlag int
+	instanceFlag   string
+)
 
 // NewClient creates a vim25.Client for use in the examples
 func NewClient(ctx context.Context) (*vim25.Client, error) {
-	// Parse URL from string
-
-	u, err := soap.ParseURL(*urlFlag)
-
+	u, err := soap.ParseURL(urlFlag)
 	if err != nil {
 		return nil, err
 	}
 
 	s := &cache.Session{
 		URL:      u,
-		Insecure: *insecureFlag,
+		Insecure: insecureFlag,
 	}
 
 	c := new(vim25.Client)
@@ -57,143 +52,139 @@ func NewClient(ctx context.Context) (*vim25.Client, error) {
 // Run calls f with Client create from the -url flag if provided,
 // otherwise runs the example against vcsim.
 func Run(f func(context.Context, *vim25.Client) error) {
-
-	flag.Parse()
 	var err error
 	var c *vim25.Client
-	allowedContexts := "status,stats,sensors,config"
-	if !strings.Contains(allowedContexts, *contextFlag) {
-		fmt.Fprint(os.Stdout, "Option not implemented, set context to status, stats, config or sensors.\n")
-		flag.Usage()
-		os.Exit(1)
-	}
-	allowedEntities := "host,vm,cluster,datastore,resourcePool"
-	if !strings.Contains(allowedEntities, *entityFlag) {
-		fmt.Fprint(os.Stdout, "Option not implemented, set entity to host, vm, cluster, datastore or resourcePool.\n")
-		flag.Usage()
-		os.Exit(1)
-	}
-	if *urlFlag == "simulator" {
+
+	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(ctx, timeoutFlag)
+	defer cancel()
+
+	if urlFlag == "simulator" {
 		err = simulator.VPX().Run(f)
 		os.Exit(0)
 	} else {
-		if *urlFlag == "" {
+		if urlFlag == "" {
 			fmt.Fprint(os.Stdout, "You must specify an url.\n")
-			flag.Usage()
 			os.Exit(1)
 		}
+		c, err = NewClient(ctx)
 	}
-	ctx := context.Background()
 
-	ctx, _ = context.WithTimeout(ctx, *timeoutFlag)
-	c, err = NewClient(ctx)
-	errorText := ""
 	if errors.Is(err, context.DeadlineExceeded) {
-		errorText = "TIMEOUT"
-	} else {
-		errorText = "UNABLE_TO_CONNECT"
-	}
-	if err == nil {
-		err = f(ctx, c)
+		fmt.Fprintln(os.Stderr, "TIMEOUT")
+		os.Exit(1)
+	} else if err != nil {
+		fmt.Fprintln(os.Stderr, "UNABLE_TO_CONNECT")
+		os.Exit(1)
 	}
 
+	err = f(ctx, c)
 	if err != nil {
-		if *contextFlag == "status" {
-			showEntityStatusErrorAndExit(errorText)
-		}
-	}
-	if *contextFlag != "status" {
 		fmt.Fprintf(os.Stderr, "\nError: %s\n", err)
 		os.Exit(1)
 	}
 }
 
-func showEntityStatusErrorAndExit(errorText string) {
-	switch *entityFlag {
-	case "host":
-		showHostStatusError(errorText)
-	case "vm":
-		showVMStatusError(errorText)
-	case "datastore":
-		showDatastoreStatusError(errorText)
-	case "cluster":
-		showClusterError(errorText)
-	}
-}
-
-func showClusterError(errorText string) {
-	fmt.Fprint(os.Stdout, "cluster;totalCpu;totalMemory;numCpuCores;numCpuThreads;effectiveCpu;effectiveMemory;numHosts;numEffectiveHosts;overallStatus;proxyStatus\n")
-
-	fmt.Fprintf(os.Stdout, "%s;%d;%d;%d;%d;%d;%d;%d;%d;%s;%s\n",
-		*entityNameFlag, 0, 0, 0, 0, 0, 0, 0, 0, "NA", errorText)
-	os.Exit(0)
-}
-
-func showDatastoreStatusError(errorText string) {
-	fmt.Fprint(os.Stdout, "name;host;internalHostname;type;maintenanceMode;capacity;freeSpace;uncommitted;accessible;proxyStatus\n")
-	fmt.Fprintf(os.Stdout, "%s;%s;%s;%s;%s;%s;%s;%v;%s;%s\n",
-		"NA", "NA", "NA", "NA", "NA", "NA", "NA", 0, "NA", errorText)
-	os.Exit(0)
-}
-
-func showVMStatusError(errorText string) {
-	fmt.Fprint(os.Stdout, "name;internalName;overallStatus;connectionState;powerState;guestHeartbeatStatus;bootTime;uptimeSeconds;proxyStatus\n")
-	fmt.Fprintf(os.Stdout, "%s;%s;%s;%s;%s;%s;%s;%v;%s\n",
-		"NA", "NA", "NA", "NA", "NA", "NA", "NA", 0, errorText)
-	os.Exit(0)
-}
-
-func showHostStatusError(errorText string) {
-	fmt.Fprint(os.Stdout, "host;uptimeSec;overallStatus;connectionState;inMaintenanceMode;powerState;standbyMode;bootTime;proxyStatus\n")
-	fmt.Fprintf(os.Stdout, "%s;%d;%s;%s;%v;%s;%s;%s;%s\n",
-		"NA", 0, "NA", "NA", false, "NA", "NA", "NA", errorText)
-	os.Exit(0)
-}
 func main() {
-	flag.Parse()
-	if *versionFlag {
-		fmt.Fprint(os.Stdout, "Version: 1.0.020\n")
-		os.Exit(0)
+	rootCmd := &cobra.Command{
+		Use:     "itoss-vsphere",
+		Short:   "Itoss CLI to get VMware vSphere health status, stats and configuration.\nRelies on govmomi client to get VMware vSphere information.",
+		Version: "1.0.020",
 	}
-	Run(func(ctx context.Context, c *vim25.Client) error {
-		switch *contextFlag {
+	rootCmd.CompletionOptions.DisableDefaultCmd = true
+	/*
 
-		case "status":
-			if *entityFlag == "host" {
-				return GetHostsStatus(ctx, c)
-			} else if *entityFlag == "vm" {
-				return GetVMStatus(ctx, c)
-			} else if *entityFlag == "cluster" {
-				return GetClusterStatus(ctx, c)
-			} else if *entityFlag == "datastore" {
-				return GetDatastoreStatus(ctx, c)
-			} else {
-				showNotImplementedError()
+			Global flags available for all commands:
+			urlFlag: URL of the vCenter server,
+			insecureFlag: Insecure flag to skip SSL verification,
+			timeoutFlag: Timeout for the connection to the vCenter server,
 
-			}
-		case "stats":
-			if *metricsFlag == "" {
+
+			Command flags:
+
+			statusCmd:
+				hostFlag: Host entity name flag,
+				vmFlag: VM entity name flag,
+				clusterFlag: Cluster entity name flag,
+				datastoreFlag: Datastore entity name flag,
+				resourcePoolFlag: Resource pool entity name flag
+
+			statsCmd:
+				metricsFlag: Metrics to query,
+				functionsFlag: Functions to query,
+				maxSamplesFlag: Maximum number of samples to query,
+				instanceFlag: Instance name to query
+				hostFlag: Host entity name flag,
+				vmFlag: VM entity name flag
+				clusterFlag: Cluster entity name flag,
+				datastoreFlag: Datastore entity name flag,
+				resourcePoolFlag: Resource pool entity name flag
+
+		`	sensorsCmd:
+				hostFlag: Host entity name flag,
+
+			configCmd:
+				hostFlag: Host entity name flag,
+				vmFlag: VM entity name flag,
+				clusterFlag: Cluster entity name flag,
+				datastoreFlag: Datastore entity name flag,
+				resourcePoolFlag: Resource pool entity name flag
+
+	*/
+	rootCmd.PersistentFlags().StringVarP(&urlFlag, "url", "u", "", "Required. Usage: -u or --url <https://username:password@host/sdk> (domain users can be set as username@domain)")
+	rootCmd.PersistentFlags().BoolVarP(&insecureFlag, "insecure", "i", false, "Required. Usage: -i or --insecure")
+	rootCmd.PersistentFlags().DurationVarP(&timeoutFlag, "timeout", "t", 10*time.Second, "Optional. Usage: -t or --timeout <timeout in duration Ex.: 10s (ms,h,m can be used as well)>")
+
+	rootCmd.PersistentFlags().StringVarP(&entityFlag, "entity", "e", "host", "Optional. Usage: -e or --entity <host|vm|cluster|datastore|resourcePool>")
+	rootCmd.PersistentFlags().StringVarP(&entityNameFlag, "entityName", "n", "*", "Optional. Usage: -n or --entityName <host name| vm name |datastore name| cluster name| resourcePool name>")
+
+	// Define additional flag for datastore entity
+	rootCmd.PersistentFlags().StringVarP(&hostedByFlag, "hostedBy", "b", "*", "Optional. Usage: --hostedBy <host name> (for datastore entity only)")
+
+	statusCmd := &cobra.Command{
+		Use:   "status",
+		Short: "Get the status of specified entities",
+		Run: func(cmd *cobra.Command, args []string) {
+			Run(func(ctx context.Context, c *vim25.Client) error {
+				switch entityFlag {
+				case "host":
+					return GetHostsStatus(ctx, c)
+				case "vm":
+					return GetVMStatus(ctx, c)
+				case "cluster":
+					return GetClusterStatus(ctx, c)
+				case "datastore":
+					return GetDatastoreStatus(ctx, c)
+				default:
+					fmt.Fprint(os.Stdout, "Option not implemented.\n")
+					os.Exit(1)
+				}
+				return nil
+			})
+		},
+	}
+
+	statsCmd := &cobra.Command{
+		Use:   "stats",
+		Short: "Get the stats of specified entities",
+		Run: func(cmd *cobra.Command, args []string) {
+			if metricsFlag == "" {
 				fmt.Fprint(os.Stdout, "You must specify metrics to query.\n")
-				flag.Usage()
 				os.Exit(1)
 			}
 
-			if *metricsFlag != "" {
-				metrics := strings.Split(*metricsFlag, ",")
-				if len(metrics) > 1 && *instanceFlag != "" {
-					fmt.Fprint(os.Stdout, "You must specify only one metric when using instance.\n")
-					flag.Usage()
-					os.Exit(1)
-				}
+			metrics := strings.Split(metricsFlag, ",")
+			if len(metrics) > 1 && instanceFlag != "" {
+				fmt.Fprint(os.Stdout, "You must specify only one metric when using instance.\n")
+				os.Exit(1)
 			}
-			var functions []string
-			if *functionsFlag != "last" {
-				functions = strings.Split(*functionsFlag, ",")
 
+			var functions []string
+			if functionsFlag != "last" {
+				functions = strings.Split(functionsFlag, ",")
 				for _, f := range functions {
 					if !strings.Contains("last,min,max,avg", f) {
 						fmt.Fprint(os.Stdout, "You must specify a valid function (avg,min,max,last).\n")
-						flag.Usage()
 						os.Exit(1)
 					}
 				}
@@ -201,41 +192,61 @@ func main() {
 				functions = []string{"last"}
 			}
 
-			if *entityFlag == "host" {
-				return GetHostStats(ctx, c, functions)
-			} else if *entityFlag == "vm" {
-				return GetVMStats(ctx, c, functions)
+			Run(func(ctx context.Context, c *vim25.Client) error {
+				switch entityFlag {
+				case "host":
+					return GetHostStats(ctx, c, functions)
+				case "vm":
+					return GetVMStats(ctx, c, functions)
+				default:
+					fmt.Fprint(os.Stdout, "Option not implemented.\n")
+					os.Exit(1)
+				}
+				return nil
+			})
+		},
+	}
+
+	statsCmd.Flags().StringVarP(&metricsFlag, "metrics", "m", "cpu.usage.average", "For context stats only. Optional. Usage: -m or --metrics <cpu.usage.average,mem.usage.average>")
+	statsCmd.Flags().StringVarP(&functionsFlag, "functions", "f", "last", "For context stats only. Optional. Usage: -f or --functions <min,max,avg,last>")
+	statsCmd.Flags().IntVarP(&maxSamplesFlag, "maxSamples", "s", 1, "For context stats only. Optional. Usage: -s or --maxSamples <number of samples>")
+	statsCmd.Flags().StringVarP(&instanceFlag, "instance", "I", "", "For context stats only. Optional. Usage: -I or --instance <instance name> (default is -)")
+
+	sensorsCmd := &cobra.Command{
+		Use:   "sensors",
+		Short: "Get sensor information for hosts",
+		Run: func(cmd *cobra.Command, args []string) {
+			if entityFlag == "host" {
+				Run(func(ctx context.Context, c *vim25.Client) error {
+					return GetHostsSensors(ctx, c)
+				})
 			} else {
-				showNotImplementedError()
+				fmt.Fprint(os.Stdout, "Option not implemented.\n")
+				os.Exit(1)
 			}
+		},
+	}
 
-		case "sensors":
-			if *entityFlag == "host" {
-				return GetHostsSensors(ctx, c)
-			} else {
-				showNotImplementedError()
+	configCmd := &cobra.Command{
+		Use:   "config",
+		Short: "Get configuration details of specified entities",
+		Run: func(cmd *cobra.Command, args []string) {
+			Run(func(ctx context.Context, c *vim25.Client) error {
+				switch entityFlag {
+				case "host":
+					return GetHostsConfig(ctx, c)
+				case "vm":
+					return GetVMConfig(ctx, c)
+				default:
+					fmt.Fprint(os.Stdout, "Option not implemented.\n")
+					os.Exit(1)
+				}
+				return nil
+			})
+		},
+	}
 
-			}
+	rootCmd.AddCommand(statusCmd, statsCmd, sensorsCmd, configCmd)
 
-		case "config":
-			if *entityFlag == "host" {
-				return GetHostsConfig(ctx, c)
-			} else if *entityFlag == "vm" {
-				return GetVMConfig(ctx, c)
-			} else {
-				showNotImplementedError()
-			}
-		default:
-
-			showNotImplementedError()
-
-		}
-		return nil
-	})
-}
-
-func showNotImplementedError() {
-	fmt.Fprint(os.Stdout, "Option not implemented.\n")
-	flag.Usage()
-	os.Exit(1)
+	rootCmd.Execute()
 }

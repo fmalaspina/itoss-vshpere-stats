@@ -22,11 +22,11 @@ func GetHostStats(ctx context.Context, c *vim25.Client, functions []string) erro
 	}
 	defer v.Destroy(ctx)
 	var hss []mo.HostSystem
-	err = v.RetrieveWithFilter(ctx, []string{"HostSystem"}, []string{"summary"}, &hss, property.Match{"name": *entityNameFlag})
+	err = v.RetrieveWithFilter(ctx, []string{"HostSystem"}, []string{"summary"}, &hss, property.Match{"name": entityNameFlag})
 	//if err != nil {
 	//	return err
 	//}
-	//	hostName, err := getHostName(ctx, v, *entityNameFlag)
+	//	hostName, err := getHostNames(ctx, v, *entityNameFlag)
 
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error getting host name: %s\n", err)
@@ -54,7 +54,7 @@ func GetVMStats(ctx context.Context, c *vim25.Client, functions []string) error 
 	defer v.Destroy(ctx)
 
 	var vms []mo.VirtualMachine
-	err = v.RetrieveWithFilter(ctx, []string{"VirtualMachine"}, []string{"summary"}, &vms, property.Match{"name": *entityNameFlag})
+	err = v.RetrieveWithFilter(ctx, []string{"VirtualMachine"}, []string{"summary"}, &vms, property.Match{"name": entityNameFlag})
 	var vmNames []string
 	var internalVMNames = make(map[string]string)
 	// Iterate over the host systems and collect names
@@ -74,10 +74,10 @@ func GetVMStats(ctx context.Context, c *vim25.Client, functions []string) error 
 func getStats(ctx context.Context, err error, v *view.ContainerView, functions []string, entityToQuery string, names []string, internalNames map[string]string) error {
 	var metricsToQuery []string
 
-	if len(strings.Split(*metricsFlag, ",")) > 1 {
-		metricsToQuery = strings.Split(*metricsFlag, ",")
+	if len(strings.Split(metricsFlag, ",")) > 1 {
+		metricsToQuery = strings.Split(metricsFlag, ",")
 	} else {
-		metricsToQuery = []string{*metricsFlag}
+		metricsToQuery = []string{metricsFlag}
 
 	}
 
@@ -119,9 +119,9 @@ func getStats(ctx context.Context, err error, v *view.ContainerView, functions [
 	}
 	// Create PerfQuerySpec
 	spec := types.PerfQuerySpec{
-		MaxSample:  int32(*maxSamplesFlag),
-		MetricId:   []types.PerfMetricId{{Instance: *instanceFlag}},
-		IntervalId: int32(*intervalFlag),
+		MaxSample:  int32(maxSamplesFlag),
+		MetricId:   []types.PerfMetricId{{Instance: instanceFlag}},
+		IntervalId: int32(intervalFlag),
 	}
 
 	// Query metrics
@@ -146,7 +146,7 @@ func getStats(ctx context.Context, err error, v *view.ContainerView, functions [
 	for _, metric := range result {
 		resultLine := ""
 		name := metric.Entity
-		if *entityNameFlag != "*" && !contains(names, name.Value) {
+		if entityNameFlag != "*" && !contains(names, name.Value) {
 			continue
 		}
 		for _, v := range metric.Value {
@@ -178,7 +178,7 @@ func getStats(ctx context.Context, err error, v *view.ContainerView, functions [
 					resultLine += fmt.Sprintf(";%.2f", result)
 				}
 				resultLine += fmt.Sprintf(";%s;", units)
-				if *instanceFlag != "" {
+				if instanceFlag != "" {
 					resultLine += "\n"
 				} else {
 					resultLine += "|"
@@ -205,7 +205,7 @@ func getStats(ctx context.Context, err error, v *view.ContainerView, functions [
 		fmt.Println(result)
 	}
 	if !metricFound {
-		fmt.Fprintf(os.Stderr, "\nMetric not found for entity %s\n", *entityNameFlag)
+		fmt.Fprintf(os.Stderr, "\nMetric not found for entity %s\n", entityNameFlag)
 		os.Exit(1)
 	}
 	return nil

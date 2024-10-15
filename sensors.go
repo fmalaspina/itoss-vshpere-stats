@@ -10,6 +10,7 @@ import (
 	"os"
 )
 
+// TODO revisar que no se comporte como host status debe ser fault
 func GetHostsSensors(ctx context.Context, c *vim25.Client) error {
 	m := view.NewManager(c)
 	v, err := m.CreateContainerView(ctx, c.ServiceContent.RootFolder, []string{"HostSystem"}, true)
@@ -19,7 +20,7 @@ func GetHostsSensors(ctx context.Context, c *vim25.Client) error {
 	defer v.Destroy(ctx)
 	var hss []mo.HostSystem
 
-	err = v.RetrieveWithFilter(ctx, []string{"HostSystem"}, []string{"summary", "runtime"}, &hss, property.Match{"name": *entityNameFlag})
+	err = v.RetrieveWithFilter(ctx, []string{"HostSystem"}, []string{"summary", "runtime"}, &hss, property.Match{"name": entityNameFlag})
 
 	if err != nil {
 		return err
@@ -45,7 +46,7 @@ func GetHostsSensors(ctx context.Context, c *vim25.Client) error {
 			sensorsFound = true
 		}
 		if !sensorsFound {
-			fmt.Fprintf(os.Stderr, "Error getting sensors from host %s!\n", *entityNameFlag)
+			fmt.Fprintf(os.Stderr, "Error getting sensors from host %s!\n", entityNameFlag)
 			os.Exit(1)
 		}
 		//
@@ -53,7 +54,7 @@ func GetHostsSensors(ctx context.Context, c *vim25.Client) error {
 	}
 	if !hostFound {
 
-		fmt.Fprintf(os.Stderr, "Host %s not found!\n", *entityNameFlag)
+		fmt.Fprintf(os.Stderr, "Host %s not found!\n", entityNameFlag)
 		os.Exit(1)
 
 	}

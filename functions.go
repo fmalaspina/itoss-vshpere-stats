@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/vmware/govmomi/property"
 	"github.com/vmware/govmomi/view"
+	"github.com/vmware/govmomi/vim25"
 	"github.com/vmware/govmomi/vim25/mo"
 	"strconv"
 	"strings"
@@ -72,20 +73,32 @@ func contains(names []string, value string) bool {
 	}
 	return false
 }
-func getHostName(ctx context.Context, v *view.ContainerView, name string) (string, error) {
-
+func getHostNames(ctx context.Context, c *vim25.Client, name string) ([]string, error) {
+	m := view.NewManager(c)
+	vHost, err := m.CreateContainerView(ctx, c.ServiceContent.RootFolder, []string{"HostSystem"}, true)
+	if err != nil {
+		var emptyHostnames []string
+		return emptyHostnames, fmt.Errorf("host %s not found", name)
+	}
+	defer vHost.Destroy(ctx)
 	var hss []mo.HostSystem
 
-	err := v.RetrieveWithFilter(ctx, []string{"HostSystem"}, []string{"summary"}, &hss, property.Match{"name": name})
+	var hostNames []string
+	err = vHost.RetrieveWithFilter(ctx, []string{"HostSystem"}, []string{"summary"}, &hss, property.Match{"name": name})
 	if err != nil {
-		return "", err
+		return hostNames, err
 	}
+
+	// create a []string with the hss.Summary.Host.Value
+
 	for _, hs := range hss {
-		if hs.Summary.Config.Name == name {
-			return hs.Summary.Host.Value, nil
-		}
+		hostNames = append(hostNames, hs.Summary.Host.Value)
 	}
-	return "", fmt.Errorf("host %s not found", name)
+
+	if len(hostNames) > 0 {
+		return hostNames, nil
+	}
+	return hostNames, fmt.Errorf("host %s not found", name)
 }
 
 func parseCSV(csv string) ([]float64, error) {
