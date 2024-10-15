@@ -20,7 +20,7 @@ func GetClusterStatus(ctx context.Context, c *vim25.Client) error {
 	defer v.Destroy(ctx)
 	var ccr []mo.ClusterComputeResource
 
-	err = v.RetrieveWithFilter(ctx, []string{"ClusterComputeResource"}, []string{"computeResource", "managedEntity", "summary", "extensibleManagedObject"}, &ccr, property.Match{"self.value": entityNameFlag})
+	err = v.RetrieveWithFilter(ctx, []string{"ClusterComputeResource"}, []string{"computeResource", "managedEntity", "summary", "extensibleManagedObject"}, &ccr, property.Match{"self.value": clusterFlag})
 	if err != nil {
 		showClusterError(err.Error())
 	}
@@ -64,7 +64,7 @@ func GetHostsStatus(ctx context.Context, c *vim25.Client) error {
 
 	var hss []mo.HostSystem
 
-	err = vHost.RetrieveWithFilter(ctx, []string{"HostSystem"}, []string{"summary"}, &hss, property.Match{"name": entityNameFlag})
+	err = vHost.RetrieveWithFilter(ctx, []string{"HostSystem"}, []string{"summary"}, &hss, property.Match{"name": hostFlag})
 
 	if err != nil {
 		showHostStatusError(err.Error())
@@ -105,7 +105,7 @@ func GetVMStatus(ctx context.Context, c *vim25.Client) error {
 	defer v.Destroy(ctx)
 	var vms []mo.VirtualMachine
 
-	err = v.RetrieveWithFilter(ctx, []string{"VirtualMachine"}, []string{"summary"}, &vms, property.Match{"name": entityNameFlag})
+	err = v.RetrieveWithFilter(ctx, []string{"VirtualMachine"}, []string{"summary"}, &vms, property.Match{"name": vmFlag})
 
 	if err != nil {
 		showVMStatusError(err.Error())
@@ -144,8 +144,8 @@ func GetDatastoreStatus(ctx context.Context, c *vim25.Client) error {
 	//var hostName string
 	var err error
 	var hostNames []string
-	if hostedByFlag != "*" {
-		hostNames, err = getHostNames(ctx, c, hostedByFlag)
+	if hostFlag != "*" {
+		hostNames, err = getHostNames(ctx, c, hostFlag)
 	}
 
 	if err != nil {
@@ -166,7 +166,7 @@ func GetDatastoreStatus(ctx context.Context, c *vim25.Client) error {
 	var dss []mo.Datastore
 
 	// Retrieve datastores the match the filter
-	err = vDatastore.RetrieveWithFilter(ctx, []string{"Datastore"}, []string{"summary", "host", "info", "vm"}, &dss, property.Match{"name": entityNameFlag})
+	err = vDatastore.RetrieveWithFilter(ctx, []string{"Datastore"}, []string{"summary", "host", "info", "vm"}, &dss, property.Match{"name": datastoreFlag})
 
 	if err != nil {
 		showDatastoreStatusError(err.Error())
@@ -177,7 +177,7 @@ func GetDatastoreStatus(ctx context.Context, c *vim25.Client) error {
 		// If the datastore is not hosted by the host, skip it
 		var internalHostValues []string
 		for _, host := range ds.Host {
-			if hostedByFlag != "*" {
+			if hostFlag != "*" {
 				if !contains(hostNames, host.Key.Value) {
 					continue
 
@@ -193,7 +193,7 @@ func GetDatastoreStatus(ctx context.Context, c *vim25.Client) error {
 			safeValue(ds.Summary.FreeSpace),
 			safeValue(ds.Summary.Uncommitted),
 			safeValue(ds.Summary.Accessible),
-			safeValue(hostedByFlag),
+			safeValue(hostFlag),
 			safeValue(strings.Join(internalHostValues, ",")))
 
 		datastoreFound = true

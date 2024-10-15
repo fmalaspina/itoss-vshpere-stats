@@ -19,7 +19,7 @@ func GetHostsConfig(ctx context.Context, c *vim25.Client) error {
 	defer v.Destroy(ctx)
 	var hss []mo.HostSystem
 
-	err = v.RetrieveWithFilter(ctx, []string{"HostSystem"}, []string{"summary", "hardware"}, &hss, property.Match{"name": entityNameFlag})
+	err = v.RetrieveWithFilter(ctx, []string{"HostSystem"}, []string{"summary", "hardware"}, &hss, property.Match{"name": hostFlag})
 
 	if err != nil {
 		return err
@@ -68,7 +68,7 @@ func GetVMConfig(ctx context.Context, c *vim25.Client) error {
 	defer v.Destroy(ctx)
 	var vms []mo.VirtualMachine
 
-	err = v.RetrieveWithFilter(ctx, []string{"VirtualMachine"}, []string{"summary", "config", "layout", "resourcePool", "parent", "snapshot"}, &vms, property.Match{"name": entityNameFlag})
+	err = v.RetrieveWithFilter(ctx, []string{"VirtualMachine"}, []string{"summary", "config", "layout", "resourcePool", "parent", "snapshot"}, &vms, property.Match{"name": vmFlag})
 
 	if err != nil {
 		return err

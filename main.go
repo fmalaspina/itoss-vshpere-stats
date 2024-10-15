@@ -15,17 +15,22 @@ import (
 )
 
 var (
-	urlFlag        string
-	insecureFlag   bool
-	entityFlag     string
-	entityNameFlag string
-	hostedByFlag   string
-	timeoutFlag    time.Duration
-	intervalFlag   int
+	urlFlag      string
+	insecureFlag bool
+	timeoutFlag  time.Duration
+
+	hostFlag         string
+	vmFlag           string
+	clusterFlag      string
+	datastoreFlag    string
+	resourcePoolFlag string
+
 	metricsFlag    string
 	functionsFlag  string
 	maxSamplesFlag int
 	instanceFlag   string
+	//versionFlag    bool
+	intervalFlag int
 )
 
 // NewClient creates a vim25.Client for use in the examples
@@ -89,72 +94,35 @@ func main() {
 	rootCmd := &cobra.Command{
 		Use:     "itoss-vsphere",
 		Short:   "Itoss CLI to get VMware vSphere health status, stats and configuration.\nRelies on govmomi client to get VMware vSphere information.",
-		Version: "1.0.020",
+		Version: "1.0.022",
 	}
 	rootCmd.CompletionOptions.DisableDefaultCmd = true
-	/*
 
-			Global flags available for all commands:
-			urlFlag: URL of the vCenter server,
-			insecureFlag: Insecure flag to skip SSL verification,
-			timeoutFlag: Timeout for the connection to the vCenter server,
+	// Global flags available for all commands
+	rootCmd.PersistentFlags().StringVarP(&urlFlag, "url", "u", "", "(Required) Usage: -u or --url <https://username:password@host/sdk> (domain users can be set as username@domain)")
+	rootCmd.PersistentFlags().BoolVarP(&insecureFlag, "insecure", "i", false, "Usage: -i or --insecure")
+	rootCmd.PersistentFlags().DurationVarP(&timeoutFlag, "timeout", "T", 10*time.Second, "Usage: -T or --timeout <timeout in duration Ex.: 10s (ms,h,m can be used as well)>")
+	rootCmd.PersistentFlags().BoolP("help", "?", false, "Display help information")
 
+	// TODO falta revisar que cuando se elige --datastore o -d que se especifique otro flag que sea --mounted o -m para indicar el hostname (no usar hostFlag para esto porque se solapa
 
-			Command flags:
-
-			statusCmd:
-				hostFlag: Host entity name flag,
-				vmFlag: VM entity name flag,
-				clusterFlag: Cluster entity name flag,
-				datastoreFlag: Datastore entity name flag,
-				resourcePoolFlag: Resource pool entity name flag
-
-			statsCmd:
-				metricsFlag: Metrics to query,
-				functionsFlag: Functions to query,
-				maxSamplesFlag: Maximum number of samples to query,
-				instanceFlag: Instance name to query
-				hostFlag: Host entity name flag,
-				vmFlag: VM entity name flag
-				clusterFlag: Cluster entity name flag,
-				datastoreFlag: Datastore entity name flag,
-				resourcePoolFlag: Resource pool entity name flag
-
-		`	sensorsCmd:
-				hostFlag: Host entity name flag,
-
-			configCmd:
-				hostFlag: Host entity name flag,
-				vmFlag: VM entity name flag,
-				clusterFlag: Cluster entity name flag,
-				datastoreFlag: Datastore entity name flag,
-				resourcePoolFlag: Resource pool entity name flag
-
-	*/
-	rootCmd.PersistentFlags().StringVarP(&urlFlag, "url", "u", "", "Required. Usage: -u or --url <https://username:password@host/sdk> (domain users can be set as username@domain)")
-	rootCmd.PersistentFlags().BoolVarP(&insecureFlag, "insecure", "i", false, "Required. Usage: -i or --insecure")
-	rootCmd.PersistentFlags().DurationVarP(&timeoutFlag, "timeout", "t", 10*time.Second, "Optional. Usage: -t or --timeout <timeout in duration Ex.: 10s (ms,h,m can be used as well)>")
-
-	rootCmd.PersistentFlags().StringVarP(&entityFlag, "entity", "e", "host", "Optional. Usage: -e or --entity <host|vm|cluster|datastore|resourcePool>")
-	rootCmd.PersistentFlags().StringVarP(&entityNameFlag, "entityName", "n", "*", "Optional. Usage: -n or --entityName <host name| vm name |datastore name| cluster name| resourcePool name>")
-
-	// Define additional flag for datastore entity
-	rootCmd.PersistentFlags().StringVarP(&hostedByFlag, "hostedBy", "b", "*", "Optional. Usage: --hostedBy <host name> (for datastore entity only)")
-
+	// Status command with specific flags
 	statusCmd := &cobra.Command{
 		Use:   "status",
 		Short: "Get the status of specified entities",
 		Run: func(cmd *cobra.Command, args []string) {
 			Run(func(ctx context.Context, c *vim25.Client) error {
-				switch entityFlag {
-				case "host":
+				switch {
+				case hostFlag != "":
 					return GetHostsStatus(ctx, c)
-				case "vm":
+				case vmFlag != "":
 					return GetVMStatus(ctx, c)
-				case "cluster":
+				case clusterFlag != "":
 					return GetClusterStatus(ctx, c)
-				case "datastore":
+				case datastoreFlag != "":
 					return GetDatastoreStatus(ctx, c)
+				case resourcePoolFlag != "":
+					return GetResourcePoolStatus(ctx, c)
 				default:
 					fmt.Fprint(os.Stdout, "Option not implemented.\n")
 					os.Exit(1)
@@ -163,13 +131,24 @@ func main() {
 			})
 		},
 	}
+	statusCmd.Flags().StringVarP(&hostFlag, "host", "h", "", "Usage: -h or --host <host name>")
+	statusCmd.Flags().StringVarP(&vmFlag, "vm", "v", "", "Usage: -v or --vm <vm name>")
+	statusCmd.Flags().StringVarP(&clusterFlag, "cluster", "c", "", "Usage: -c or --cluster <cluster name>")
+	statusCmd.Flags().StringVarP(&datastoreFlag, "datastore", "d", "", "Usage: -d or --datastore <datastore name>")
+	statusCmd.Flags().StringVarP(&resourcePoolFlag, "resourcePool", "r", "", "Usage: -r or --resourcePool <resource pool name>")
 
+	// Stats command with specific flags
 	statsCmd := &cobra.Command{
 		Use:   "stats",
 		Short: "Get the stats of specified entities",
 		Run: func(cmd *cobra.Command, args []string) {
 			if metricsFlag == "" {
 				fmt.Fprint(os.Stdout, "You must specify metrics to query.\n")
+				os.Exit(1)
+			}
+
+			if hostFlag == "" && vmFlag == "" && clusterFlag == "" && datastoreFlag == "" && resourcePoolFlag == "" {
+				fmt.Fprint(os.Stdout, "You must specify host, vm, cluster, datastore or resourcePool flags.\n")
 				os.Exit(1)
 			}
 
@@ -193,60 +172,123 @@ func main() {
 			}
 
 			Run(func(ctx context.Context, c *vim25.Client) error {
-				switch entityFlag {
-				case "host":
+				switch {
+				case hostFlag != "":
 					return GetHostStats(ctx, c, functions)
-				case "vm":
+				case vmFlag != "":
 					return GetVMStats(ctx, c, functions)
+				case clusterFlag != "":
+					return GetClusterStats(ctx, c, functions)
+				case datastoreFlag != "":
+					return GetDatastoreStats(ctx, c, functions)
+				case resourcePoolFlag != "":
+					return GetResourcePoolStats(ctx, c, functions)
 				default:
 					fmt.Fprint(os.Stdout, "Option not implemented.\n")
+					cmd.Help()
 					os.Exit(1)
 				}
 				return nil
 			})
 		},
 	}
+	statsCmd.Flags().StringVarP(&metricsFlag, "metrics", "m", "", "Usage: -m or --metrics <cpu.usage.average,mem.usage.average>")
+	statsCmd.Flags().StringVarP(&functionsFlag, "functions", "f", "last", "Usage: -f or --functions <min,max,avg,last>")
+	statsCmd.Flags().IntVarP(&maxSamplesFlag, "maxSamples", "s", 1, "Usage: -s or --maxSamples <number of samples>")
+	statsCmd.Flags().IntVarP(&intervalFlag, "interval", "t", 20, "Usage: -t <interval seconds>")
+	statsCmd.Flags().StringVarP(&instanceFlag, "instance", "I", "", "Usage: -I or --instance <instance name>")
+	statsCmd.Flags().StringVarP(&hostFlag, "host", "h", "", "Usage: --host <host name>")
+	statsCmd.Flags().StringVarP(&vmFlag, "vm", "v", "", "Usage: -v or --vm <vm name>")
+	statsCmd.Flags().StringVarP(&clusterFlag, "cluster", "c", "", "Usage: -c or --cluster <cluster name>")
+	statsCmd.Flags().StringVarP(&datastoreFlag, "datastore", "d", "", "Usage: -d or --datastore <datastore name>")
+	statsCmd.Flags().StringVarP(&resourcePoolFlag, "resourcePool", "r", "", "Usage: -r or --resourcePool <resource pool name>")
 
-	statsCmd.Flags().StringVarP(&metricsFlag, "metrics", "m", "cpu.usage.average", "For context stats only. Optional. Usage: -m or --metrics <cpu.usage.average,mem.usage.average>")
-	statsCmd.Flags().StringVarP(&functionsFlag, "functions", "f", "last", "For context stats only. Optional. Usage: -f or --functions <min,max,avg,last>")
-	statsCmd.Flags().IntVarP(&maxSamplesFlag, "maxSamples", "s", 1, "For context stats only. Optional. Usage: -s or --maxSamples <number of samples>")
-	statsCmd.Flags().StringVarP(&instanceFlag, "instance", "I", "", "For context stats only. Optional. Usage: -I or --instance <instance name> (default is -)")
-
+	// Sensors command with specific flag
 	sensorsCmd := &cobra.Command{
 		Use:   "sensors",
 		Short: "Get sensor information for hosts",
 		Run: func(cmd *cobra.Command, args []string) {
-			if entityFlag == "host" {
-				Run(func(ctx context.Context, c *vim25.Client) error {
-					return GetHostsSensors(ctx, c)
-				})
-			} else {
-				fmt.Fprint(os.Stdout, "Option not implemented.\n")
+			if hostFlag == "" {
+				fmt.Fprint(os.Stdout, "You must specify the --host or -h flag for sensors command.\n")
 				os.Exit(1)
 			}
+			Run(func(ctx context.Context, c *vim25.Client) error {
+				return GetHostsSensors(ctx, c)
+			})
 		},
 	}
+	sensorsCmd.Flags().StringVarP(&hostFlag, "host", "h", "", "Usage: -h or --host <host name>")
 
+	// Config command with specific flags
 	configCmd := &cobra.Command{
 		Use:   "config",
 		Short: "Get configuration details of specified entities",
 		Run: func(cmd *cobra.Command, args []string) {
 			Run(func(ctx context.Context, c *vim25.Client) error {
-				switch entityFlag {
-				case "host":
+				switch {
+				case hostFlag != "":
 					return GetHostsConfig(ctx, c)
-				case "vm":
+				case vmFlag != "":
 					return GetVMConfig(ctx, c)
+				case clusterFlag != "":
+					return GetClusterConfig(ctx, c)
+				case datastoreFlag != "":
+					return GetDatastoreConfig(ctx, c)
+				case resourcePoolFlag != "":
+					return GetResourcePoolConfig(ctx, c)
 				default:
-					fmt.Fprint(os.Stdout, "Option not implemented.\n")
+					fmt.Fprint(os.Stdout, "You must specify host, vm, cluster, datastore or resourcePool flags.\n")
+					cmd.Help()
 					os.Exit(1)
 				}
 				return nil
 			})
+
 		},
 	}
+	configCmd.Flags().StringVarP(&hostFlag, "host", "h", "", "Usage: -h or --host <host name>")
+	configCmd.Flags().StringVarP(&vmFlag, "vm", "v", "", "Usage: -v or --vm <vm name>")
+	configCmd.Flags().StringVarP(&clusterFlag, "cluster", "c", "", "Usage: -c or --cluster <cluster name>")
+	configCmd.Flags().StringVarP(&datastoreFlag, "datastore", "d", "", "Usage: -d or --datastore <datastore name>")
+	configCmd.Flags().StringVarP(&resourcePoolFlag, "resourcePool", "r", "", "Usage: -r or --resourcePool <resource pool name>")
 
 	rootCmd.AddCommand(statusCmd, statsCmd, sensorsCmd, configCmd)
 
+	//rootCmd.PersistentFlags().BoolVarP(&versionFlag, "version", "v", false, "Optional. Usage: -v or --version")
 	rootCmd.Execute()
+}
+
+func GetResourcePoolStats(ctx context.Context, c *vim25.Client, functions []string) error {
+	fmt.Fprint(os.Stdout, "resource pool stats not implemented.\n")
+	return nil
+}
+
+func GetDatastoreStats(ctx context.Context, c *vim25.Client, functions []string) error {
+	fmt.Fprint(os.Stdout, "datastore stats not implemented.\n")
+	return nil
+}
+
+func GetClusterStats(ctx context.Context, c *vim25.Client, functions []string) error {
+	fmt.Fprint(os.Stdout, "cluster stats not implemented.\n")
+	return nil
+}
+
+func GetResourcePoolStatus(ctx context.Context, c *vim25.Client) error {
+	fmt.Fprint(os.Stdout, "resource pool stats not implemented.\n")
+	return nil
+}
+
+func GetClusterConfig(ctx context.Context, c *vim25.Client) error {
+	fmt.Fprint(os.Stdout, "cluster config not implemented.\n")
+	return nil
+}
+
+func GetResourcePoolConfig(ctx context.Context, c *vim25.Client) error {
+	fmt.Fprint(os.Stdout, "resource pool config not implemented.\n")
+	return nil
+}
+
+func GetDatastoreConfig(ctx context.Context, c *vim25.Client) error {
+	fmt.Fprint(os.Stdout, "datastore config not implemented.\n")
+	return nil
 }

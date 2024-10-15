@@ -22,7 +22,7 @@ func GetHostStats(ctx context.Context, c *vim25.Client, functions []string) erro
 	}
 	defer v.Destroy(ctx)
 	var hss []mo.HostSystem
-	err = v.RetrieveWithFilter(ctx, []string{"HostSystem"}, []string{"summary"}, &hss, property.Match{"name": entityNameFlag})
+	err = v.RetrieveWithFilter(ctx, []string{"HostSystem"}, []string{"summary"}, &hss, property.Match{"name": hostFlag})
 	//if err != nil {
 	//	return err
 	//}
@@ -41,7 +41,7 @@ func GetHostStats(ctx context.Context, c *vim25.Client, functions []string) erro
 		hostNames = append(hostNames, hs.Summary.Host.Value)
 		internalHostnames[hs.Summary.Host.Value] = hs.Summary.Config.Name
 	}
-	return getStats(ctx, err, v, functions, "HostSystem", hostNames, internalHostnames)
+	return getStats(ctx, err, v, functions, "HostSystem", hostNames, internalHostnames, hostFlag)
 
 }
 
@@ -54,7 +54,7 @@ func GetVMStats(ctx context.Context, c *vim25.Client, functions []string) error 
 	defer v.Destroy(ctx)
 
 	var vms []mo.VirtualMachine
-	err = v.RetrieveWithFilter(ctx, []string{"VirtualMachine"}, []string{"summary"}, &vms, property.Match{"name": entityNameFlag})
+	err = v.RetrieveWithFilter(ctx, []string{"VirtualMachine"}, []string{"summary"}, &vms, property.Match{"name": vmFlag})
 	var vmNames []string
 	var internalVMNames = make(map[string]string)
 	// Iterate over the host systems and collect names
@@ -67,11 +67,11 @@ func GetVMStats(ctx context.Context, c *vim25.Client, functions []string) error 
 		fmt.Fprintf(os.Stderr, "Error getting vm name: %s\n", err)
 		os.Exit(1)
 	}
-	return getStats(ctx, err, v, functions, "VirtualMachine", vmNames, internalVMNames)
+	return getStats(ctx, err, v, functions, "VirtualMachine", vmNames, internalVMNames, vmFlag)
 
 }
 
-func getStats(ctx context.Context, err error, v *view.ContainerView, functions []string, entityToQuery string, names []string, internalNames map[string]string) error {
+func getStats(ctx context.Context, err error, v *view.ContainerView, functions []string, entityToQuery string, names []string, internalNames map[string]string, flag string) error {
 	var metricsToQuery []string
 
 	if len(strings.Split(metricsFlag, ",")) > 1 {
@@ -146,7 +146,7 @@ func getStats(ctx context.Context, err error, v *view.ContainerView, functions [
 	for _, metric := range result {
 		resultLine := ""
 		name := metric.Entity
-		if entityNameFlag != "*" && !contains(names, name.Value) {
+		if flag != "*" && !contains(names, name.Value) {
 			continue
 		}
 		for _, v := range metric.Value {
@@ -205,7 +205,7 @@ func getStats(ctx context.Context, err error, v *view.ContainerView, functions [
 		fmt.Println(result)
 	}
 	if !metricFound {
-		fmt.Fprintf(os.Stderr, "\nMetric not found for entity %s\n", entityNameFlag)
+		fmt.Fprintf(os.Stderr, "\nMetric not found for entity %s\n", flag)
 		os.Exit(1)
 	}
 	return nil
