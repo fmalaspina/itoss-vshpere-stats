@@ -174,6 +174,7 @@ func GetResourcePoolConfig(ctx context.Context, c *vim25.Client) error {
 	if err != nil {
 		return err
 	}
+
 	defer v.Destroy(ctx)
 	var resourcePools []mo.ResourcePool
 
