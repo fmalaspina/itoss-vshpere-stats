@@ -95,7 +95,7 @@ func main() {
 	rootCmd := &cobra.Command{
 		Use:     "itoss-vsphere",
 		Short:   "Itoss CLI to get VMware vSphere health status, stats and configuration.\nRelies on govmomi client to get VMware vSphere information.",
-		Version: "1.0.023",
+		Version: "1.0.024",
 	}
 	rootCmd.CompletionOptions.DisableDefaultCmd = true
 
@@ -290,11 +290,11 @@ func GetDatastoreStats(ctx context.Context, c *vim25.Client, functions []string)
 //		return nil
 //	}
 //
-// TODO: Implement resource pool config
-func GetResourcePoolConfig(ctx context.Context, c *vim25.Client) error {
-	fmt.Fprint(os.Stdout, "resource pool config not implemented.\n")
-	return nil
-}
+
+//func GetResourcePoolConfig(ctx context.Context, c *vim25.Client) error {
+//	fmt.Fprint(os.Stdout, "resource pool config not implemented.\n")
+//	return nil
+//}
 
 // TODO: Implement datastore config
 func GetDatastoreConfig(ctx context.Context, c *vim25.Client) error {

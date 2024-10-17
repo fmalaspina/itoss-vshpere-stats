@@ -125,7 +125,13 @@ func GetClusterConfig(ctx context.Context, c *vim25.Client) error {
 
 	var hostNames, datastoreNames strings.Builder
 
+	clusterFound := false
+
+	fmt.Fprint(os.Stdout, "name;hosts;datastores;totalCpu;totalMemory;numCpuCores;numCpuThreads;effectiveCpu;effectiveMemory;numHosts;numEffectiveHosts\n")
+
 	for _, cluster := range clusters {
+		hostNames.Reset()
+		datastoreNames.Reset()
 		for i, host := range cluster.Host {
 			if i > 0 {
 				hostNames.WriteString(",")
@@ -138,14 +144,7 @@ func GetClusterConfig(ctx context.Context, c *vim25.Client) error {
 			}
 			datastoreNames.WriteString(datastore.Value)
 		}
-	}
-
-	clusterFound := false
-
-	fmt.Fprint(os.Stdout, "name;hosts;datastores;totalCpu;totalMemory;numCpuCores;numCpuThreads;effectiveCpu;effectiveMemory;numHosts;numEffectiveHosts\n")
-
-	for _, cluster := range clusters {
-		fmt.Fprintf(os.Stdout, "%s;%s;%s;%v;%v;%v;%v;%v;%v;%v;%v\n",
+		fmt.Fprintf(os.Stdout, "%s;%s;%s;%v;%d;%v;%v;%v;%d;%v;%v\n",
 			safeValue(cluster.Self.Value),
 			safeValue(hostNames.String()),
 			safeValue(datastoreNames.String()),
@@ -158,12 +157,65 @@ func GetClusterConfig(ctx context.Context, c *vim25.Client) error {
 			safeValue(cluster.Summary.GetComputeResourceSummary().NumHosts),
 			safeValue(cluster.Summary.GetComputeResourceSummary().NumEffectiveHosts),
 		)
+		clusterFound = true
 	}
-	//
-	clusterFound = true
-	//}
+
 	if !clusterFound {
 		fmt.Fprintf(os.Stderr, "\nError: %s\n", "Cluster not found.")
+		os.Exit(1)
+	}
+	return nil
+}
+
+func GetResourcePoolConfig(ctx context.Context, c *vim25.Client) error {
+	// based on GetClusterConfig
+	m := view.NewManager(c)
+	v, err := m.CreateContainerView(ctx, c.ServiceContent.RootFolder, []string{"ResourcePool"}, true)
+	if err != nil {
+		return err
+	}
+	defer v.Destroy(ctx)
+	var resourcePools []mo.ResourcePool
+
+	err = v.RetrieveWithFilter(ctx, []string{"ResourcePool"}, []string{"parent", "namespace", "name", "summary", "owner", "config", "vm", "runtime"}, &resourcePools, property.Match{"self.value": resourcePoolFlag})
+
+	if err != nil {
+		return err
+
+	}
+	var vmNames strings.Builder
+
+	fmt.Fprint(os.Stdout, "name;vmNames;cpuReservation;cpuExpandableReservation;cpuLimit;memoryReservation;memoryExpandableReservation;memoryLimit\n")
+
+	resourcePoolFound := false
+
+	for _, rp := range resourcePools {
+		vmNames.Reset()
+
+		for i, vmName := range rp.Vm {
+			if i > 0 {
+				vmNames.WriteString(",")
+			}
+			vmNames.WriteString(vmName.Value)
+		}
+
+		fmt.Fprintf(os.Stdout, "%s;%s;%s;%d;%t;%d;%d;%t;%d\n",
+			safeValue(rp.Self.Value),
+			safeValue(rp.Parent.Value),
+			safeValue(vmNames.String()),
+			safeValue(*rp.Config.CpuAllocation.Reservation),
+			safeValue(*rp.Config.CpuAllocation.ExpandableReservation),
+			safeValue(*rp.Config.CpuAllocation.Limit),
+			safeValue(*rp.Config.MemoryAllocation.Reservation),
+			safeValue(*rp.Config.MemoryAllocation.ExpandableReservation),
+			safeValue(*rp.Config.MemoryAllocation.Limit),
+		)
+
+		//
+		resourcePoolFound = true
+	}
+	if !resourcePoolFound {
+		fmt.Fprintf(os.Stderr, "\nError: %s\n", "Resource pool not found.")
 		os.Exit(1)
 	}
 	return nil
