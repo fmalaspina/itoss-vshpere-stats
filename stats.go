@@ -71,6 +71,58 @@ func GetVMStats(ctx context.Context, c *vim25.Client, functions []string) error 
 
 }
 
+func GetResourcePoolStats(ctx context.Context, c *vim25.Client, functions []string) error {
+	m := view.NewManager(c)
+	v, err := m.CreateContainerView(ctx, c.ServiceContent.RootFolder, []string{"ResourcePool"}, true)
+	if err != nil {
+		return err
+	}
+	defer v.Destroy(ctx)
+
+	var rp []mo.ResourcePool
+	err = v.RetrieveWithFilter(ctx, []string{"ResourcePool"}, []string{"name", "summary", "config", "runtime"}, &rp, property.Match{"self.value": resourcePoolFlag})
+	var rpNames []string
+	var internalRPNames = make(map[string]string)
+	// Iterate over the host systems and collect names
+	for _, r := range rp {
+
+		rpNames = append(rpNames, r.Self.Value)
+		internalRPNames[r.Self.Value] = r.Self.Value
+	}
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error getting resource pool name: %s\n", err)
+		os.Exit(1)
+	}
+	return getStats(ctx, err, v, functions, "ResourcePool", rpNames, internalRPNames, resourcePoolFlag)
+
+}
+
+func GetClusterStats(ctx context.Context, c *vim25.Client, functions []string) error {
+	m := view.NewManager(c)
+	v, err := m.CreateContainerView(ctx, c.ServiceContent.RootFolder, []string{"ClusterComputeResource"}, true)
+	if err != nil {
+		return err
+	}
+	defer v.Destroy(ctx)
+
+	var cr []mo.ClusterComputeResource
+	err = v.RetrieveWithFilter(ctx, []string{"ClusterComputeResource"}, []string{"summary"}, &cr, property.Match{"self.value": clusterFlag})
+	var crNames []string
+	var internalCRNames = make(map[string]string)
+	// Iterate over the host systems and collect names
+	for _, c := range cr {
+
+		crNames = append(crNames, c.Self.Value)
+		internalCRNames[c.Self.Value] = c.Self.Value
+	}
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error getting cluster name: %s\n", err)
+		os.Exit(1)
+	}
+	return getStats(ctx, err, v, functions, "ClusterComputeResource", crNames, internalCRNames, clusterFlag)
+
+}
+
 func getStats(ctx context.Context, err error, v *view.ContainerView, functions []string, entityToQuery string, names []string, internalNames map[string]string, flag string) error {
 	var metricsToQuery []string
 
@@ -96,7 +148,7 @@ func getStats(ctx context.Context, err error, v *view.ContainerView, functions [
 
 	fmt.Println(title)
 
-	vmsRefs, err := v.Find(ctx, []string{entityToQuery}, nil)
+	entityRefs, err := v.Find(ctx, []string{entityToQuery}, nil)
 	if err != nil {
 		return err
 	}
@@ -125,7 +177,7 @@ func getStats(ctx context.Context, err error, v *view.ContainerView, functions [
 	}
 
 	// Query metrics
-	sample, err := perfManager.SampleByName(ctx, spec, metricsToQuery, vmsRefs)
+	sample, err := perfManager.SampleByName(ctx, spec, metricsToQuery, entityRefs)
 	if err != nil {
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error getting metric: %s\n", err)

@@ -10,7 +10,6 @@ import (
 	"os"
 )
 
-// TODO revisar que no se comporte como host status debe ser fault
 func GetHostsSensors(ctx context.Context, c *vim25.Client) error {
 	m := view.NewManager(c)
 	v, err := m.CreateContainerView(ctx, c.ServiceContent.RootFolder, []string{"HostSystem"}, true)
@@ -23,7 +22,8 @@ func GetHostsSensors(ctx context.Context, c *vim25.Client) error {
 	err = v.RetrieveWithFilter(ctx, []string{"HostSystem"}, []string{"summary", "runtime"}, &hss, property.Match{"name": hostFlag})
 
 	if err != nil {
-		return err
+		fmt.Fprintf(os.Stderr, "Error getting host name: %s\n", err)
+		os.Exit(1)
 	}
 	hostFound := false
 

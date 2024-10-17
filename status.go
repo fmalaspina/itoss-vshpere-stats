@@ -15,18 +15,26 @@ func GetClusterStatus(ctx context.Context, c *vim25.Client) error {
 	m := view.NewManager(c)
 	v, err := m.CreateContainerView(ctx, c.ServiceContent.RootFolder, []string{"ClusterComputeResource"}, true)
 	if err != nil {
-		showClusterError(err.Error())
+		showClusterStatusError("CLUSTER_NOT_FOUND:" + err.Error())
 	}
 	defer v.Destroy(ctx)
 	var ccr []mo.ClusterComputeResource
 
 	err = v.RetrieveWithFilter(ctx, []string{"ClusterComputeResource"}, []string{"computeResource", "managedEntity", "summary", "extensibleManagedObject"}, &ccr, property.Match{"self.value": clusterFlag})
 	if err != nil {
-		showClusterError(err.Error())
+		showClusterStatusError(err.Error())
 	}
+
+	//jsonBytes, err := json.MarshalIndent(ccr, "", "  ")
+	//if err != nil {
+	//	fmt.Printf("Error serializing cluster details: %v\n", err)
+	//} else {
+	//	fmt.Printf("Cluster details:\n%s\n", string(jsonBytes))
+	//}
+
 	clusterFound := false
 
-	fmt.Fprint(os.Stdout, "cluster;totalCpu;totalMemory;numCpuCores;numCpuThreads;effectiveCpu;effectiveMemory;numHosts;numEffectiveHosts;overallStatus\n")
+	fmt.Fprint(os.Stdout, "cluster;totalCpu;totalMemory;numCpuCores;numCpuThreads;effectiveCpu;effectiveMemory;numHosts;numEffectiveHosts;overallStatus;proxyStatus\n")
 	for _, cr := range ccr {
 
 		fmt.Fprintf(os.Stdout, "%s;%d;%d;%d;%d;%d;%d;%d;%d;%s;%s\n",
@@ -48,7 +56,7 @@ func GetClusterStatus(ctx context.Context, c *vim25.Client) error {
 		//fmt.Fprintf(os.Stdout, "%s;%d;%d;%d;%d;%d;%d;%d;%d;%s;%s\n",
 		//	*entityNameFlag, 0, 0, 0, 0, 0, 0, 0, 0, "NA", "CLUSTER_NOT_FOUND")
 		//os.Exit(0)
-		showClusterError("CLUSTER_NOT_FOUND")
+		showClusterStatusError("CLUSTER_NOT_FOUND")
 	}
 	return nil
 
@@ -67,7 +75,7 @@ func GetHostsStatus(ctx context.Context, c *vim25.Client) error {
 	err = vHost.RetrieveWithFilter(ctx, []string{"HostSystem"}, []string{"summary"}, &hss, property.Match{"name": hostFlag})
 
 	if err != nil {
-		showHostStatusError(err.Error())
+		showHostStatusError("HOST_NOT_FOUND:" + err.Error())
 	}
 	hostFound := false
 
@@ -108,7 +116,7 @@ func GetVMStatus(ctx context.Context, c *vim25.Client) error {
 	err = v.RetrieveWithFilter(ctx, []string{"VirtualMachine"}, []string{"summary"}, &vms, property.Match{"name": vmFlag})
 
 	if err != nil {
-		showVMStatusError(err.Error())
+		showVMStatusError("VM_NOT_FOUND:" + err.Error())
 	}
 
 	vmFound := false
@@ -145,11 +153,11 @@ func GetDatastoreStatus(ctx context.Context, c *vim25.Client) error {
 	var err error
 	var hostNames []string
 	if hostFlag != "*" {
-		hostNames, err = getHostNames(ctx, c, hostFlag)
+		hostNames, err = getHostNames(ctx, c, mountedOnFlag)
 	}
 
 	if err != nil {
-		showHostStatusError(err.Error())
+		showHostStatusError("DATASTORE_NOT_FOUND:" + err.Error())
 	}
 
 	m := view.NewManager(c)
@@ -160,7 +168,7 @@ func GetDatastoreStatus(ctx context.Context, c *vim25.Client) error {
 	}
 	defer vDatastore.Destroy(ctx)
 
-	fmt.Fprint(os.Stdout, "name;type;maintenanceMode;capacity;freeSpace;uncommitted;accessible;hostedBy;hostedByInternal\n")
+	fmt.Fprint(os.Stdout, "name;type;maintenanceMode;capacity;freeSpace;uncommitted;accessible;mountedOn;mountedOnInternal;proxyStatus\n")
 
 	// Destination slice to hold the result
 	var dss []mo.Datastore
@@ -185,7 +193,7 @@ func GetDatastoreStatus(ctx context.Context, c *vim25.Client) error {
 			}
 			internalHostValues = append(internalHostValues, host.Key.Value)
 		}
-		fmt.Fprintf(os.Stdout, "%s;%s;%v;%v;%v;%v;%v;%s;%s\n",
+		fmt.Fprintf(os.Stdout, "%s;%s;%v;%v;%v;%v;%v;%s;%s;%s\n",
 			safeValue(ds.Summary.Name),
 			safeValue(ds.Summary.Type),
 			safeValue(ds.Summary.MaintenanceMode),
@@ -193,13 +201,74 @@ func GetDatastoreStatus(ctx context.Context, c *vim25.Client) error {
 			safeValue(ds.Summary.FreeSpace),
 			safeValue(ds.Summary.Uncommitted),
 			safeValue(ds.Summary.Accessible),
-			safeValue(hostFlag),
-			safeValue(strings.Join(internalHostValues, ",")))
+			safeValue(mountedOnFlag),
+			safeValue(strings.Join(internalHostValues, ",")),
+			"OK")
 
 		datastoreFound = true
 	}
 	if !datastoreFound {
 		showDatastoreStatusError("DATASTORE_NOT_FOUND")
+	}
+	return nil
+}
+
+func GetResourcePoolStatus(ctx context.Context, c *vim25.Client) error {
+
+	m := view.NewManager(c)
+
+	vResource, err := m.CreateContainerView(ctx, c.ServiceContent.RootFolder, []string{"ResourcePool"}, true)
+	if err != nil {
+		showResourcePoolStatusError(err.Error())
+	}
+	defer vResource.Destroy(ctx)
+
+	fmt.Fprint(os.Stdout, "name;internalName;cpuUnreservedForPool;cpuMaxUsage;cpuOverallUsage;cpuReservationUsed;cpuReservationUsedForVm;cpuUnreservedForVm;memoryUnreservedForPool;memoryMaxUsage;memoryOverallUsage;memoryReservationUsed;memoryReservationUsedForVm;memoryUnreservedForVm;overallStatus;proxyStatus\n")
+
+	// Destination slice to hold the result
+	var rp []mo.ResourcePool
+
+	// Retrieve datastores the match the filter
+	err = vResource.RetrieveWithFilter(ctx, []string{"ResourcePool"}, []string{"parent", "namespace", "name", "summary", "owner", "config", "vm", "runtime"}, &rp, property.Match{"self.value": resourcePoolFlag})
+
+	if err != nil {
+		showDatastoreStatusError("RESOURCE_POOL_NOT_FOUND:" + err.Error())
+	}
+
+	resourceFound := false
+
+	for _, r := range rp {
+
+		fmt.Fprintf(os.Stdout, "%s;%s;%v;%v;%v;%v;%v;%v;%v;%v;%v;%v;%v;%v;%s;%s\n",
+			safeValue(r.Name),
+			safeValue(r.ExtensibleManagedObject.Self.Value),
+			safeValue(r.Runtime.Cpu.UnreservedForPool),
+			safeValue(r.Runtime.Cpu.MaxUsage),
+			safeValue(r.Runtime.Cpu.OverallUsage),
+			safeValue(r.Runtime.Cpu.ReservationUsed),
+			safeValue(r.Runtime.Cpu.ReservationUsedForVm),
+			safeValue(r.Runtime.Cpu.UnreservedForVm),
+			safeValue(r.Runtime.Memory.UnreservedForPool),
+			safeValue(r.Runtime.Memory.MaxUsage),
+			safeValue(r.Runtime.Memory.OverallUsage),
+			safeValue(r.Runtime.Memory.ReservationUsed),
+			safeValue(r.Runtime.Memory.ReservationUsedForVm),
+			safeValue(r.Runtime.Memory.UnreservedForVm),
+			safeValue(r.Runtime.OverallStatus),
+
+			//safeValue(ds.Summary.MaintenanceMode),
+			//safeValue(ds.Summary.Capacity),
+			//safeValue(ds.Summary.FreeSpace),
+			//safeValue(ds.Summary.Uncommitted),
+			//safeValue(ds.Summary.Accessible),
+			//safeValue(mountedOnFlag),
+			//safeValue(strings.Join(internalHostValues, ",")),
+			"OK")
+
+		resourceFound = true
+	}
+	if !resourceFound {
+		showResourcePoolStatusError("RESOURCE_POOL_NOT_FOUND")
 	}
 	return nil
 }

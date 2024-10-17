@@ -5,7 +5,7 @@ import (
 	"os"
 )
 
-func showClusterError(errorText string) {
+func showClusterStatusError(errorText string) {
 	fmt.Fprint(os.Stdout, "cluster;totalCpu;totalMemory;numCpuCores;numCpuThreads;effectiveCpu;effectiveMemory;numHosts;numEffectiveHosts;overallStatus;proxyStatus\n")
 
 	fmt.Fprintf(os.Stdout, "%s;%d;%d;%d;%d;%d;%d;%d;%d;%s;%s\n",
@@ -14,6 +14,13 @@ func showClusterError(errorText string) {
 }
 
 func showDatastoreStatusError(errorText string) {
+	fmt.Fprint(os.Stdout, "name;host;internalHostname;type;maintenanceMode;capacity;freeSpace;uncommitted;accessible;proxyStatus; ")
+	fmt.Fprintf(os.Stdout, "%s;%s;%s;%s;%s;%s;%s;%v;%s;%s\n",
+		"NA", "NA", "NA", "NA", "NA", "NA", "NA", 0, "NA", errorText)
+	os.Exit(0)
+}
+
+func showResourcePoolStatusError(errorText string) {
 	fmt.Fprint(os.Stdout, "name;host;internalHostname;type;maintenanceMode;capacity;freeSpace;uncommitted;accessible;proxyStatus; ")
 	fmt.Fprintf(os.Stdout, "%s;%s;%s;%s;%s;%s;%s;%v;%s;%s\n",
 		"NA", "NA", "NA", "NA", "NA", "NA", "NA", 0, "NA", errorText)

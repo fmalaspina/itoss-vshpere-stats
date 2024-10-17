@@ -8,6 +8,7 @@ import (
 	"github.com/vmware/govmomi/vim25"
 	"github.com/vmware/govmomi/vim25/mo"
 	"os"
+	"strings"
 )
 
 func GetHostsConfig(ctx context.Context, c *vim25.Client) error {
@@ -102,6 +103,67 @@ func GetVMConfig(ctx context.Context, c *vim25.Client) error {
 		//	*entityNameFlag, "NA", "NA", "NA", "NA", "NA")
 		//os.Exit(0)
 		fmt.Fprintf(os.Stderr, "\nError: %s\n", "VM not found.")
+		os.Exit(1)
+	}
+	return nil
+}
+
+func GetClusterConfig(ctx context.Context, c *vim25.Client) error {
+	m := view.NewManager(c)
+	v, err := m.CreateContainerView(ctx, c.ServiceContent.RootFolder, []string{"ClusterComputeResource"}, true)
+	if err != nil {
+		return err
+	}
+	defer v.Destroy(ctx)
+	var clusters []mo.ClusterComputeResource
+
+	err = v.RetrieveWithFilter(ctx, []string{"ClusterComputeResource"}, []string{"summary", "configuration", "host", "datastore"}, &clusters, property.Match{"self.value": clusterFlag})
+
+	if err != nil {
+		return err
+	}
+
+	var hostNames, datastoreNames strings.Builder
+
+	for _, cluster := range clusters {
+		for i, host := range cluster.Host {
+			if i > 0 {
+				hostNames.WriteString(",")
+			}
+			hostNames.WriteString(host.Value)
+		}
+		for i, datastore := range cluster.Datastore {
+			if i > 0 {
+				datastoreNames.WriteString(",")
+			}
+			datastoreNames.WriteString(datastore.Value)
+		}
+	}
+
+	clusterFound := false
+
+	fmt.Fprint(os.Stdout, "name;hosts;datastores;totalCpu;totalMemory;numCpuCores;numCpuThreads;effectiveCpu;effectiveMemory;numHosts;numEffectiveHosts\n")
+
+	for _, cluster := range clusters {
+		fmt.Fprintf(os.Stdout, "%s;%s;%s;%v;%v;%v;%v;%v;%v;%v;%v\n",
+			safeValue(cluster.Self.Value),
+			safeValue(hostNames.String()),
+			safeValue(datastoreNames.String()),
+			safeValue(cluster.Summary.GetComputeResourceSummary().TotalCpu),
+			safeValue(cluster.Summary.GetComputeResourceSummary().TotalMemory),
+			safeValue(cluster.Summary.GetComputeResourceSummary().NumCpuCores),
+			safeValue(cluster.Summary.GetComputeResourceSummary().NumCpuThreads),
+			safeValue(cluster.Summary.GetComputeResourceSummary().EffectiveCpu),
+			safeValue(cluster.Summary.GetComputeResourceSummary().EffectiveMemory),
+			safeValue(cluster.Summary.GetComputeResourceSummary().NumHosts),
+			safeValue(cluster.Summary.GetComputeResourceSummary().NumEffectiveHosts),
+		)
+	}
+	//
+	clusterFound = true
+	//}
+	if !clusterFound {
+		fmt.Fprintf(os.Stderr, "\nError: %s\n", "Cluster not found.")
 		os.Exit(1)
 	}
 	return nil
