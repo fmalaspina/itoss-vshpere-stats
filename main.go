@@ -105,6 +105,10 @@ func main() {
 	rootCmd.PersistentFlags().DurationVarP(&timeoutFlag, "timeout", "T", 10*time.Second, "Usage: -T or --timeout <timeout in duration Ex.: 10s (ms,h,m can be used as well)>")
 	rootCmd.PersistentFlags().BoolP("help", "?", false, "Display help information")
 
+	if urlFlag == "" {
+		fmt.Fprint(os.Stdout, "You must specify an url. Use -u or --url flag.\n")
+		os.Exit(1)
+	}
 	// Status command with specific flags
 	statusCmd := &cobra.Command{
 		Use:   "status",
