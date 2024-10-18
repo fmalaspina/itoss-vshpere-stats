@@ -185,13 +185,12 @@ func GetDatastoreStatus(ctx context.Context, c *vim25.Client) error {
 		// If the datastore is not hosted by the host, skip it
 		var internalHostValues []string
 		for _, host := range ds.Host {
-			if hostFlag != "*" {
-				if !contains(hostNames, host.Key.Value) {
-					continue
-
-				}
-			}
 			internalHostValues = append(internalHostValues, host.Key.Value)
+		}
+		if hostFlag != "*" {
+			if !containsAny(hostNames, internalHostValues) {
+				continue
+			}
 		}
 		fmt.Fprintf(os.Stdout, "%s;%s;%v;%v;%v;%v;%v;%s;%s;%s\n",
 			safeValue(ds.Summary.Name),

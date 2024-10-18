@@ -221,3 +221,77 @@ func GetResourcePoolConfig(ctx context.Context, c *vim25.Client) error {
 	}
 	return nil
 }
+
+func GetDatastoreConfig(ctx context.Context, c *vim25.Client) error {
+
+	var err error
+	var hostNames []string
+	if hostFlag != "*" {
+		hostNames, err = getHostNames(ctx, c, mountedOnFlag)
+	}
+
+	if err != nil {
+
+		return err
+
+	}
+
+	m := view.NewManager(c)
+
+	vDatastore, err := m.CreateContainerView(ctx, c.ServiceContent.RootFolder, []string{"Datastore"}, true)
+	if err != nil {
+		return err
+	}
+	defer vDatastore.Destroy(ctx)
+
+	fmt.Fprint(os.Stdout, "name;internalName;capacity;maxFileSize;maxMemoryFileSize;MaxVirtualDiskCapacity;mountedOnHosts;mountedOnVms\n")
+
+	// Destination slice to hold the result
+	var dss []mo.Datastore
+
+	// Retrieve datastores the match the filter
+	err = vDatastore.RetrieveWithFilter(ctx, []string{"Datastore"}, []string{"summary", "host", "info", "vm"}, &dss, property.Match{"name": datastoreFlag})
+
+	if err != nil {
+		return err
+	}
+	datastoreFound := false
+	// Iterate over the filtered datastores
+	for _, ds := range dss {
+		var internalHostValues []string
+		for _, host := range ds.Host {
+			internalHostValues = append(internalHostValues, host.Key.Value)
+		}
+
+		// same for vms
+		var vmNames []string
+		for _, vm := range ds.Vm {
+			vmNames = append(vmNames, vm.Value)
+		}
+
+		if hostFlag != "*" {
+			if !containsAny(hostNames, internalHostValues) {
+				continue
+			}
+		}
+
+		fmt.Fprintf(os.Stdout, "%s;%s;%s;%v;%d;%d;%d;%s;%s\n",
+			safeValue(ds.Summary.Name),
+			safeValue(ds.Summary.Datastore.Value),
+			safeValue(ds.Summary.Type),
+			safeValue(ds.Summary.Capacity),
+			safeValue(ds.Info.GetDatastoreInfo().MaxFileSize),
+			safeValue(ds.Info.GetDatastoreInfo().MaxMemoryFileSize),
+			safeValue(ds.Info.GetDatastoreInfo().MaxVirtualDiskCapacity),
+			safeValue(strings.Join(internalHostValues, ",")),
+			safeValue(strings.Join(vmNames, ",")),
+		)
+
+		datastoreFound = true
+	}
+	if !datastoreFound {
+		fmt.Fprintf(os.Stderr, "\nError: %s\n", "Datastore not found.")
+		os.Exit(1)
+	}
+	return nil
+}

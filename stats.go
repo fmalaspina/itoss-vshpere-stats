@@ -23,10 +23,6 @@ func GetHostStats(ctx context.Context, c *vim25.Client, functions []string) erro
 	defer v.Destroy(ctx)
 	var hss []mo.HostSystem
 	err = v.RetrieveWithFilter(ctx, []string{"HostSystem"}, []string{"summary"}, &hss, property.Match{"name": hostFlag})
-	//if err != nil {
-	//	return err
-	//}
-	//	hostName, err := getHostNames(ctx, v, *entityNameFlag)
 
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error getting host name: %s\n", err)
@@ -55,6 +51,10 @@ func GetVMStats(ctx context.Context, c *vim25.Client, functions []string) error 
 
 	var vms []mo.VirtualMachine
 	err = v.RetrieveWithFilter(ctx, []string{"VirtualMachine"}, []string{"summary"}, &vms, property.Match{"name": vmFlag})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error getting vm name: %s\n", err)
+		os.Exit(1)
+	}
 	var vmNames []string
 	var internalVMNames = make(map[string]string)
 	// Iterate over the host systems and collect names
@@ -62,10 +62,6 @@ func GetVMStats(ctx context.Context, c *vim25.Client, functions []string) error 
 
 		vmNames = append(vmNames, vm.Summary.Vm.Value)
 		internalVMNames[vm.Summary.Vm.Value] = vm.Summary.Config.Name
-	}
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error getting vm name: %s\n", err)
-		os.Exit(1)
 	}
 	return getStats(ctx, err, v, functions, "VirtualMachine", vmNames, internalVMNames, vmFlag)
 
@@ -81,6 +77,10 @@ func GetResourcePoolStats(ctx context.Context, c *vim25.Client, functions []stri
 
 	var rp []mo.ResourcePool
 	err = v.RetrieveWithFilter(ctx, []string{"ResourcePool"}, []string{"name", "summary", "config", "runtime"}, &rp, property.Match{"self.value": resourcePoolFlag})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error getting resource pool name: %s\n", err)
+		os.Exit(1)
+	}
 	var rpNames []string
 	var internalRPNames = make(map[string]string)
 	// Iterate over the host systems and collect names
@@ -88,10 +88,6 @@ func GetResourcePoolStats(ctx context.Context, c *vim25.Client, functions []stri
 
 		rpNames = append(rpNames, r.Self.Value)
 		internalRPNames[r.Self.Value] = r.Self.Value
-	}
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error getting resource pool name: %s\n", err)
-		os.Exit(1)
 	}
 	return getStats(ctx, err, v, functions, "ResourcePool", rpNames, internalRPNames, resourcePoolFlag)
 
@@ -107,6 +103,10 @@ func GetClusterStats(ctx context.Context, c *vim25.Client, functions []string) e
 
 	var cr []mo.ClusterComputeResource
 	err = v.RetrieveWithFilter(ctx, []string{"ClusterComputeResource"}, []string{"summary"}, &cr, property.Match{"self.value": clusterFlag})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error getting cluster name: %s\n", err)
+		os.Exit(1)
+	}
 	var crNames []string
 	var internalCRNames = make(map[string]string)
 	// Iterate over the host systems and collect names
@@ -115,12 +115,65 @@ func GetClusterStats(ctx context.Context, c *vim25.Client, functions []string) e
 		crNames = append(crNames, c.Self.Value)
 		internalCRNames[c.Self.Value] = c.Self.Value
 	}
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error getting cluster name: %s\n", err)
-		os.Exit(1)
-	}
 	return getStats(ctx, err, v, functions, "ClusterComputeResource", crNames, internalCRNames, clusterFlag)
 
+}
+
+func GetDatastoreStats(ctx context.Context, c *vim25.Client, functions []string) error {
+	m := view.NewManager(c)
+
+	var err error
+	var hostNames []string
+	if hostFlag != "*" {
+		hostNames, err = getHostNames(ctx, c, mountedOnFlag)
+	}
+	if err != nil {
+		return err
+	}
+
+	v, err := m.CreateContainerView(ctx, c.ServiceContent.RootFolder, []string{"Datastore"}, true)
+	if err != nil {
+		return err
+	}
+	defer v.Destroy(ctx)
+
+	// Destination slice to hold the result
+	var datastores []mo.Datastore
+
+	// Retrieve datastores the match the filter
+	err = v.RetrieveWithFilter(ctx, []string{"Datastore"}, []string{"summary", "host", "info", "vm"}, &datastores, property.Match{"name": datastoreFlag})
+	if err != nil {
+		return err
+	}
+
+	datastoreFound := false
+	// Iterate over the filtered datastores
+	for _, ds := range datastores {
+		var internalHostValues []string
+		for _, host := range ds.Host {
+			internalHostValues = append(internalHostValues, host.Key.Value)
+		}
+
+		if hostFlag != "*" {
+			if !containsAny(hostNames, internalHostValues) {
+				continue
+			}
+		}
+
+		datastoreFound = true
+	}
+	if !datastoreFound {
+		fmt.Fprintf(os.Stderr, "\nError: %s\n", "Datastore not found.")
+		os.Exit(1)
+	}
+	var dsNames []string
+	var internalDSNames = make(map[string]string)
+	// Iterate over the host systems and collect names
+	for _, d := range datastores {
+		dsNames = append(dsNames, d.Self.Value)
+		internalDSNames[d.Self.Value] = d.Self.Value
+	}
+	return getStats(ctx, err, v, functions, "Datastore", dsNames, internalDSNames, datastoreFlag)
 }
 
 func getStats(ctx context.Context, err error, v *view.ContainerView, functions []string, entityToQuery string, names []string, internalNames map[string]string, flag string) error {

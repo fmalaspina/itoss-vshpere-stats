@@ -73,6 +73,19 @@ func contains(names []string, value string) bool {
 	}
 	return false
 }
+
+// like contains but returns true if any alement of names contains any element of values
+func containsAny(names []string, values []string) bool {
+	for _, name := range names {
+		for _, value := range values {
+			if name == value {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func getHostNames(ctx context.Context, c *vim25.Client, name string) ([]string, error) {
 	m := view.NewManager(c)
 	vHost, err := m.CreateContainerView(ctx, c.ServiceContent.RootFolder, []string{"HostSystem"}, true)

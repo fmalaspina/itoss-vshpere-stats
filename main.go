@@ -95,7 +95,7 @@ func main() {
 	rootCmd := &cobra.Command{
 		Use:     "itoss-vsphere",
 		Short:   "Itoss CLI to get VMware vSphere health status, stats and configuration.\nRelies on govmomi client to get VMware vSphere information.",
-		Version: "1.0.024",
+		Version: "1.0.025",
 	}
 	rootCmd.CompletionOptions.DisableDefaultCmd = true
 
@@ -112,7 +112,7 @@ func main() {
 		Run: func(cmd *cobra.Command, args []string) {
 
 			if datastoreFlag != "" && mountedOnFlag == "" {
-				fmt.Fprint(os.Stdout, "You must specify host when using datastore. Use -m or --mountedOn flag.\n")
+				fmt.Fprint(os.Stdout, "You must specify host when using datastore. Use -o or --mountedOn flag.\n")
 				os.Exit(1)
 			}
 
@@ -140,7 +140,7 @@ func main() {
 	statusCmd.Flags().StringVarP(&vmFlag, "vm", "v", "", "Usage: -v or --vm <vm name>")
 	statusCmd.Flags().StringVarP(&clusterFlag, "cluster", "c", "", "Usage: -c or --cluster <cluster name>")
 	statusCmd.Flags().StringVarP(&datastoreFlag, "datastore", "d", "", "Usage: -d or --datastore <datastore name>")
-	statusCmd.Flags().StringVarP(&mountedOnFlag, "mountedOn", "m", "", "Usage: -m or --mountedOn <host name> (only for Datastore)")
+	statusCmd.Flags().StringVarP(&mountedOnFlag, "mountedOn", "o", "", "Usage: -o or --mountedOn <host name> (only for Datastore)")
 	statusCmd.Flags().StringVarP(&resourcePoolFlag, "resourcePool", "r", "", "Usage: -r or --resourcePool <resource pool name>")
 
 	// Stats command with specific flags
@@ -158,6 +158,10 @@ func main() {
 				os.Exit(1)
 			}
 
+			if datastoreFlag != "" && mountedOnFlag == "" {
+				fmt.Fprint(os.Stdout, "You must specify host when using datastore. Use -o or --mountedOn flag.\n")
+				os.Exit(1)
+			}
 			metrics := strings.Split(metricsFlag, ",")
 			if len(metrics) > 1 && instanceFlag != "" {
 				fmt.Fprint(os.Stdout, "You must specify only one metric when using instance.\n")
@@ -207,6 +211,7 @@ func main() {
 	statsCmd.Flags().StringVarP(&vmFlag, "vm", "v", "", "Usage: -v or --vm <vm name>")
 	statsCmd.Flags().StringVarP(&clusterFlag, "cluster", "c", "", "Usage: -c or --cluster <cluster name>")
 	statsCmd.Flags().StringVarP(&datastoreFlag, "datastore", "d", "", "Usage: -d or --datastore <datastore name>")
+	statsCmd.Flags().StringVarP(&mountedOnFlag, "mountedOn", "o", "", "Usage: -o or --mountedOn <host name> (only for Datastore)")
 	statsCmd.Flags().StringVarP(&resourcePoolFlag, "resourcePool", "r", "", "Usage: -r or --resourcePool <resource pool name>")
 
 	// Sensors command with specific flag
@@ -230,6 +235,10 @@ func main() {
 		Use:   "config",
 		Short: "Get configuration details of specified entities",
 		Run: func(cmd *cobra.Command, args []string) {
+			if datastoreFlag != "" && mountedOnFlag == "" {
+				fmt.Fprint(os.Stdout, "You must specify host when using datastore. Use -o or --mountedOn flag.\n")
+				os.Exit(1)
+			}
 			Run(func(ctx context.Context, c *vim25.Client) error {
 				switch {
 				case hostFlag != "":
@@ -256,48 +265,10 @@ func main() {
 	configCmd.Flags().StringVarP(&vmFlag, "vm", "v", "", "Usage: -v or --vm <vm name>")
 	configCmd.Flags().StringVarP(&clusterFlag, "cluster", "c", "", "Usage: -c or --cluster <cluster name>")
 	configCmd.Flags().StringVarP(&datastoreFlag, "datastore", "d", "", "Usage: -d or --datastore <datastore name>")
+	configCmd.Flags().StringVarP(&mountedOnFlag, "mountedOn", "o", "", "Usage: -o or --mountedOn <host name> (only for Datastore)")
 	configCmd.Flags().StringVarP(&resourcePoolFlag, "resourcePool", "r", "", "Usage: -r or --resourcePool <resource pool name>")
 
 	rootCmd.AddCommand(statusCmd, statsCmd, sensorsCmd, configCmd)
 
-	//rootCmd.PersistentFlags().BoolVarP(&versionFlag, "version", "v", false, "Optional. Usage: -v or --version")
 	rootCmd.Execute()
-}
-
-//	func GetResourcePoolStats(ctx context.Context, c *vim25.Client, functions []string) error {
-//		fmt.Fprint(os.Stdout, "resource pool stats not implemented.\n")
-//		return nil
-//	}
-//
-// TODO implement datastore stats
-func GetDatastoreStats(ctx context.Context, c *vim25.Client, functions []string) error {
-	fmt.Fprint(os.Stdout, "datastore stats not implemented.\n")
-	return nil
-}
-
-//func GetClusterStats(ctx context.Context, c *vim25.Client, functions []string) error {
-//	fmt.Fprint(os.Stdout, "cluster stats not implemented.\n")
-//	return nil
-//}
-
-//func GetResourcePoolStatus(ctx context.Context, c *vim25.Client) error {
-//	fmt.Fprint(os.Stdout, "resource pool stats not implemented.\n")
-//	return nil
-//}
-
-//	func GetClusterConfig(ctx context.Context, c *vim25.Client) error {
-//		fmt.Fprint(os.Stdout, "cluster config not implemented.\n")
-//		return nil
-//	}
-//
-
-//func GetResourcePoolConfig(ctx context.Context, c *vim25.Client) error {
-//	fmt.Fprint(os.Stdout, "resource pool config not implemented.\n")
-//	return nil
-//}
-
-// TODO: Implement datastore config
-func GetDatastoreConfig(ctx context.Context, c *vim25.Client) error {
-	fmt.Fprint(os.Stdout, "datastore config not implemented.\n")
-	return nil
 }
