@@ -31,7 +31,8 @@ var (
 	maxSamplesFlag int
 	instanceFlag   string
 	//versionFlag    bool
-	intervalFlag int
+	intervalFlag    int
+	listMetricsFlag bool
 )
 
 // NewClient creates a vim25.Client for use in the examples
@@ -95,7 +96,7 @@ func main() {
 	rootCmd := &cobra.Command{
 		Use:     "itoss-vsphere",
 		Short:   "Itoss CLI to get VMware vSphere health status, stats and configuration.\nRelies on govmomi client to get VMware vSphere information.",
-		Version: "1.0.025",
+		Version: "1.0.028",
 	}
 	rootCmd.CompletionOptions.DisableDefaultCmd = true
 
@@ -148,6 +149,13 @@ func main() {
 		Use:   "stats",
 		Short: "Get the stats of specified entities",
 		Run: func(cmd *cobra.Command, args []string) {
+			if listMetricsFlag {
+				Run(func(ctx context.Context, c *vim25.Client) error {
+					return ListMetrics(ctx, c)
+				})
+				os.Exit(0)
+			}
+
 			if metricsFlag == "" {
 				fmt.Fprint(os.Stdout, "You must specify metrics to query. Use -m or --metric flag.\n")
 				os.Exit(1)
@@ -214,6 +222,7 @@ func main() {
 	statsCmd.Flags().StringVarP(&mountedOnFlag, "mountedOn", "o", "", "Usage: -o or --mountedOn <host name> (only for Datastore)")
 	statsCmd.Flags().StringVarP(&resourcePoolFlag, "resourcePool", "r", "", "Usage: -r or --resourcePool <resource pool name>")
 
+	statsCmd.Flags().BoolVarP(&listMetricsFlag, "list", "l", false, "Usage: -l or --list")
 	// Sensors command with specific flag
 	sensorsCmd := &cobra.Command{
 		Use:   "sensors",
@@ -241,6 +250,7 @@ func main() {
 			}
 			Run(func(ctx context.Context, c *vim25.Client) error {
 				switch {
+
 				case hostFlag != "":
 					return GetHostsConfig(ctx, c)
 				case vmFlag != "":

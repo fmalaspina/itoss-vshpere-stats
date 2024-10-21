@@ -33,7 +33,7 @@ func GetHostsConfig(ctx context.Context, c *vim25.Client) error {
 		//	continue
 		//}
 
-		fmt.Fprintf(os.Stdout, "%s;%s;%s;%v;%s;%v;%v;%v;%s;%s;%s;%s\n",
+		fmt.Fprintf(os.Stdout, "%s;%s;%s;%v;%s;%v;%v;%v;%s;%s;%s;%s;%s\n",
 			safeValue(hs.Summary.Config.Name),
 			safeValue(hs.Summary.Hardware.Vendor),
 			safeValue(hs.Summary.Hardware.Model),
@@ -45,7 +45,8 @@ func GetHostsConfig(ctx context.Context, c *vim25.Client) error {
 			safeValue(hs.Summary.Config.Product.FullName),
 			safeValue(hs.Summary.Config.Product.Version),
 			safeValue(hs.Summary.Config.Product.Build),
-			safeValue(hs.Summary.Config.Product.PatchLevel))
+			safeValue(hs.Summary.Config.Product.PatchLevel),
+			safeValue(hs.Summary.Host.Value))
 
 		//
 		hostFound = true

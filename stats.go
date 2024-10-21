@@ -11,6 +11,7 @@ import (
 	"github.com/vmware/govmomi/vim25/mo"
 	"github.com/vmware/govmomi/vim25/types"
 	"os"
+	"regexp"
 	"strings"
 )
 
@@ -322,5 +323,121 @@ func checkMetricExistence(counterMap map[string]*types.PerfCounterInfo, metricNa
 			return errors.New(fmt.Sprintf("Metric '%s' does not exist", key))
 		}
 	}
+	return nil
+}
+
+func ListMetrics(ctx context.Context, client *vim25.Client) error {
+	// Create a view manager
+	viewMgr := view.NewManager(client)
+
+	// Create a view for various types of entities (VirtualMachine, HostSystem, Datastore, etc.)
+	v, err := viewMgr.CreateContainerView(ctx, client.ServiceContent.RootFolder, []string{"VirtualMachine", "HostSystem", "Datastore", "ClusterComputeResource"}, true)
+	if err != nil {
+		return fmt.Errorf("failed to create container view: %v", err)
+	}
+	defer v.Destroy(ctx)
+
+	// Retrieve the list of performance metrics
+	perfMgr := performance.NewManager(client)
+
+	// Fetch all available performance counters
+	counters, err := perfMgr.CounterInfoByName(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get counter info: %v", err)
+	}
+
+	// Retrieve the entities to determine the available types
+	var entities []mo.ManagedEntity
+	err = v.Retrieve(ctx, []string{"VirtualMachine", "HostSystem", "Datastore", "ClusterComputeResource"}, nil, &entities)
+	if err != nil {
+		return fmt.Errorf("failed to retrieve entities: %v", err)
+	}
+
+	// Create a map to track which counters are applicable to which entity types
+	entityMetrics := make(map[string]map[string]bool)
+
+	// Populate the map with entity types and their valid metrics
+	for _, entity := range entities {
+		// Query available metrics for this entity
+		metricsList, err := perfMgr.AvailableMetric(ctx, entity.Reference(), 300) // Using 300 seconds as a general interval
+		if err != nil {
+			continue
+		}
+
+		if _, exists := entityMetrics[entity.Self.Type]; !exists {
+			entityMetrics[entity.Self.Type] = make(map[string]bool)
+		}
+
+		for _, metric := range metricsList {
+			counterKey := fmt.Sprintf("%d", metric.CounterId)
+			entityMetrics[entity.Self.Type][counterKey] = true
+		}
+	}
+
+	// Compile a regex if metricsFlag contains a wildcard
+	var metricRegex *regexp.Regexp
+	if metricsFlag != "" && metricsFlag != "*" {
+		pattern := strings.ReplaceAll(metricsFlag, "*", ".*")
+		metricRegex, err = regexp.Compile("^" + pattern + "$")
+		if err != nil {
+			return fmt.Errorf("failed to compile regex for metricsFlag: %v", err)
+		}
+	}
+
+	// Print out the performance counters, their intervals, and the types of entities they are valid for
+	fmt.Println("Performance Counters, Real-Time Availability, and Valid Entity Types:")
+	for counterName, counterInfo := range counters {
+		// Filter based on metricsFlag
+		if metricRegex != nil && !metricRegex.MatchString(counterName) {
+			continue
+		}
+
+		fmt.Printf("Counter: %s (%d)\n", counterName, counterInfo.Key)
+
+		// Print the entity types valid for this counter
+		fmt.Println("Valid for entity types:")
+		for entityType := range entityMetrics {
+			if entityMetrics[entityType][fmt.Sprintf("%d", counterInfo.Key)] {
+				fmt.Printf("- Entity Type: %s\n", entityType)
+			}
+		}
+
+		// Check if the counter is available for real-time interval for any entity type
+		isRealTimeAvailable := false
+		for _, entity := range entities {
+			perfQuerySpec := types.PerfQuerySpec{
+				Entity:     entity.Reference(),
+				MaxSample:  1,
+				MetricId:   []types.PerfMetricId{{CounterId: counterInfo.Key, Instance: "*"}},
+				IntervalId: 20, // Real-time interval
+			}
+
+			sample, err := perfMgr.SampleByName(ctx, perfQuerySpec, []string{counterName}, []types.ManagedObjectReference{entity.Reference()})
+			if err == nil && len(sample) > 0 {
+				isRealTimeAvailable = true
+				break
+			}
+		}
+
+		// Print if real-time interval is available
+		if isRealTimeAvailable {
+			fmt.Println("Real-Time Interval Available: Yes")
+		} else {
+			fmt.Println("Real-Time Interval Available: No")
+		}
+		fmt.Println()
+	}
+
+	// Print standard available intervals for all counters
+	fmt.Println("Standard Available Intervals for All Counters:")
+	intervals, err := perfMgr.HistoricalInterval(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get historical intervals: %v", err)
+	}
+	for _, interval := range intervals {
+		fmt.Printf("- IntervalId: %d, Name: %s, Sampling Period: %d seconds, Retention Length: %d\n",
+			interval.SamplingPeriod, interval.Name, interval.SamplingPeriod, interval.Length)
+	}
+
 	return nil
 }
