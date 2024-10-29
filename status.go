@@ -15,7 +15,7 @@ func GetClusterStatus(ctx context.Context, c *vim25.Client) error {
 	m := view.NewManager(c)
 	v, err := m.CreateContainerView(ctx, c.ServiceContent.RootFolder, []string{"ClusterComputeResource"}, true)
 	if err != nil {
-		showClusterStatusError("CLUSTER_NOT_FOUND:" + err.Error())
+		showClusterStatusError("CLUSTER_NOT_FOUND")
 	}
 	defer v.Destroy(ctx)
 	var ccr []mo.ClusterComputeResource
@@ -75,7 +75,7 @@ func GetHostsStatus(ctx context.Context, c *vim25.Client) error {
 	err = vHost.RetrieveWithFilter(ctx, []string{"HostSystem"}, []string{"summary"}, &hss, property.Match{"name": hostFlag})
 
 	if err != nil {
-		showHostStatusError("HOST_NOT_FOUND:" + err.Error())
+		showHostStatusError("HOST_NOT_FOUND")
 	}
 	hostFound := false
 
@@ -157,7 +157,7 @@ func GetDatastoreStatus(ctx context.Context, c *vim25.Client) error {
 	}
 
 	if err != nil {
-		showHostStatusError("DATASTORE_NOT_FOUND:" + err.Error())
+		showHostStatusError("DATASTORE_NOT_FOUND")
 	}
 
 	m := view.NewManager(c)
@@ -231,7 +231,7 @@ func GetResourcePoolStatus(ctx context.Context, c *vim25.Client) error {
 	err = vResource.RetrieveWithFilter(ctx, []string{"ResourcePool"}, []string{"parent", "namespace", "name", "summary", "owner", "config", "vm", "runtime"}, &rp, property.Match{"self.value": resourcePoolFlag})
 
 	if err != nil {
-		showDatastoreStatusError("RESOURCE_POOL_NOT_FOUND:" + err.Error())
+		showDatastoreStatusError("RESOURCE_POOL_NOT_FOUND")
 	}
 
 	resourceFound := false

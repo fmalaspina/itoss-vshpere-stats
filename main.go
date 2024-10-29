@@ -96,7 +96,7 @@ func main() {
 	rootCmd := &cobra.Command{
 		Use:     "itoss-vsphere",
 		Short:   "Itoss CLI to get VMware vSphere health status, stats and configuration.\nRelies on govmomi client to get VMware vSphere information.",
-		Version: "1.0.028",
+		Version: "1.0.029",
 	}
 	rootCmd.CompletionOptions.DisableDefaultCmd = true
 
