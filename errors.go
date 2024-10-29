@@ -14,14 +14,14 @@ func showClusterStatusError(errorText string) {
 }
 
 func showDatastoreStatusError(errorText string) {
-	fmt.Fprint(os.Stdout, "name;host;internalHostname;type;maintenanceMode;capacity;freeSpace;uncommitted;accessible;proxyStatus; ")
+	fmt.Fprint(os.Stdout, "name;host;internalHostname;type;maintenanceMode;capacity;freeSpace;uncommitted;accessible;proxyStatus\n")
 	fmt.Fprintf(os.Stdout, "%s;%s;%s;%s;%s;%s;%s;%v;%s;%s\n",
 		"NA", "NA", "NA", "NA", "NA", "NA", "NA", 0, "NA", errorText)
 	os.Exit(0)
 }
 
 func showResourcePoolStatusError(errorText string) {
-	fmt.Fprint(os.Stdout, "name;host;internalHostname;type;maintenanceMode;capacity;freeSpace;uncommitted;accessible;proxyStatus; ")
+	fmt.Fprint(os.Stdout, "name;host;internalHostname;type;maintenanceMode;capacity;freeSpace;uncommitted;accessible;proxyStatus\n")
 	fmt.Fprintf(os.Stdout, "%s;%s;%s;%s;%s;%s;%s;%v;%s;%s\n",
 		"NA", "NA", "NA", "NA", "NA", "NA", "NA", 0, "NA", errorText)
 	os.Exit(0)

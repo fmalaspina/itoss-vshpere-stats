@@ -33,6 +33,7 @@ var (
 	//versionFlag    bool
 	intervalFlag    int
 	listMetricsFlag bool
+	statusFlag      bool = false
 )
 
 // NewClient creates a vim25.Client for use in the examples
@@ -78,17 +79,68 @@ func Run(f func(context.Context, *vim25.Client) error) {
 	}
 
 	if errors.Is(err, context.DeadlineExceeded) {
-		fmt.Fprintln(os.Stderr, "TIMEOUT")
-		os.Exit(1)
+		message := "TIMEOUT"
+		if statusFlag {
+			switch {
+			case hostFlag != "":
+				showHostStatusError(message)
+			case vmFlag != "":
+				showVMStatusError(message)
+			case clusterFlag != "":
+				showClusterStatusError(message)
+			case datastoreFlag != "":
+				showDatastoreStatusError(message)
+			case resourcePoolFlag != "":
+				showResourcePoolStatusError(message)
+			}
+			os.Exit(0)
+		} else {
+			fmt.Fprintln(os.Stderr, message)
+			os.Exit(1)
+		}
+
 	} else if err != nil {
-		fmt.Fprintln(os.Stderr, "UNABLE_TO_CONNECT")
-		os.Exit(1)
+		message := "UNABLE_TO_CONNECT"
+		if statusFlag {
+			switch {
+			case hostFlag != "":
+				showHostStatusError(message)
+			case vmFlag != "":
+				showVMStatusError(message)
+			case clusterFlag != "":
+				showClusterStatusError(message)
+			case datastoreFlag != "":
+				showDatastoreStatusError(message)
+			case resourcePoolFlag != "":
+				showResourcePoolStatusError(message)
+			}
+			os.Exit(0)
+		} else {
+			fmt.Fprintln(os.Stderr, message)
+			os.Exit(1)
+		}
 	}
 
 	err = f(ctx, c)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "\nError: %s\n", err)
-		os.Exit(1)
+		if statusFlag {
+			switch {
+			case hostFlag != "":
+				showHostStatusError(err.Error())
+			case vmFlag != "":
+				showVMStatusError(err.Error())
+			case clusterFlag != "":
+				showClusterStatusError(err.Error())
+			case datastoreFlag != "":
+				showDatastoreStatusError(err.Error())
+			case resourcePoolFlag != "":
+				showResourcePoolStatusError(err.Error())
+			}
+			os.Exit(0)
+		} else {
+			fmt.Fprintf(os.Stderr, "\nError: %s\n", err)
+			os.Exit(1)
+		}
 	}
 }
 
@@ -112,6 +164,7 @@ func main() {
 		Short: "Get the status of specified entities",
 		Run: func(cmd *cobra.Command, args []string) {
 
+			statusFlag = true
 			if datastoreFlag != "" && mountedOnFlag == "" {
 				fmt.Fprint(os.Stdout, "You must specify host when using datastore. Use -o or --mountedOn flag.\n")
 				os.Exit(1)
